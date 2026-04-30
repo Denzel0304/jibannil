@@ -8,11 +8,11 @@
 import { jbn_initAuth, jbn_login, jbn_session, jbn_me, jbn_onAuthChange } from './auth.js';
 import { jbn_loadSnapshot, jbn_fetchAll, jbn_onStateChange } from './store.js';
 import { jbn_startRealtime } from './sync.js';
-import { jbn_paint, jbn_setRoute } from './render.js';
+import { jbn_paint, jbn_setRoute, jbn_schedulePaint_exported as jbn_schedulePaint } from './render.js';
 import { jbn_$, jbn_el, jbn_clear, jbn_toast } from './util.js';
 
 // 내부에서 재렌더 트리거할 때 쓰는 커스텀 이벤트 (admin 등에서 발사)
-document.addEventListener('jbn:rerender', () => jbn_paint());
+document.addEventListener('jbn:rerender', () => jbn_schedulePaint());
 
 async function jbn_boot() {
   // 1) 캐시된 스냅샷 즉시 로드 (오프라인 첫 화면 띄우기용)

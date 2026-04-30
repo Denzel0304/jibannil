@@ -6,6 +6,7 @@
 
 import { jbnState, jbn_onStateChange } from './store.js';
 import { jbn_me, jbn_logout } from './auth.js';
+import { jbn_renderAdmin } from './admin.js';
 import {
   jbn_buildTodayList, jbn_personDailyProgress,
   jbn_taskUnitProgress, jbn_overdueByMember, jbn_periodStats,
@@ -23,18 +24,32 @@ import { jbn_pickDate, jbn_openModal, jbn_closeModal, jbn_alert, jbn_confirm } f
 
 let jbn_lastRoute = 'today';
 
-export function jbn_setRoute(name) { jbn_lastRoute = name; jbn_paint(); }
+export function jbn_schedulePaint_exported() { jbn_schedulePaint(); }
+export function jbn_setRoute(name) { jbn_lastRoute = name; jbn_schedulePaint(); }
 export function jbn_currentRoute() { return jbn_lastRoute; }
 
 let jbn_celebratedDate = null;
 
-// 변경시 자동 재렌더 (드래그 중엔 미룸)
-jbn_onStateChange(() => {
+// ── paint 디바운스 ──────────────────────────────────────────
+// store.js 의 jbn_emitChange 가 RAF 로 한 번 묶지만,
+// Realtime echo N개가 연속으로 와서 RAF 를 여러 번 통과하는 경우를 막기 위해
+// render 레벨에서 한 번 더 16ms(1프레임) 디바운스를 건다.
+let jbn_paintPending = false;
+function jbn_schedulePaint() {
+  if (jbn_paintPending) return;
+  jbn_paintPending = true;
+  requestAnimationFrame(() => {
+    jbn_paintPending = false;
+    jbn_paint();
+  });
+}
+
+jbn_onStateChange((reason) => {
   if (jbn_dragLockState.locked) {
-    setTimeout(jbn_paint, 80);
+    // 드래그 중 — 락 해제 후(60ms) paint 가 이미 예약되므로 여기선 무시
     return;
   }
-  jbn_paint();
+  jbn_schedulePaint();
 });
 
 export function jbn_paint() {
@@ -42,19 +57,33 @@ export function jbn_paint() {
   if (!me) return;
   const main = jbn_$('#jbnMain');
   if (!main) return;
-  jbn_clear(main);
 
-  // 헤더 탭
-  main.appendChild(jbn_renderTopBar(me));
+  // ── tabbar 는 건드리지 않고 컨텐츠만 교체 ──────────────────
+  // tabbar 가 매번 재생성되면 버튼 포커스/ripple 이 끊겨 번쩍임이 생김
+  let tabbar = main.querySelector('.jbn-tabbar');
+  let contentWrap = main.querySelector('#jbnContent');
 
-  if (jbn_lastRoute === 'today')   main.appendChild(jbn_renderToday(me));
-  else if (jbn_lastRoute === 'stats')   main.appendChild(jbn_renderStats(me));
-  // admin 은 admin.js 의 jbn_renderAdmin 이 호출됨
-  else if (jbn_lastRoute === 'admin' && me.is_super) {
-    import('./admin.js').then(mod => {
-      const node = mod.jbn_renderAdmin(me);
-      if (node) main.appendChild(node);
+  if (!tabbar) {
+    // 최초 렌더 또는 shell 재생성 후
+    jbn_clear(main);
+    tabbar = jbn_renderTopBar(me);
+    main.appendChild(tabbar);
+    contentWrap = jbn_el('div', { id: 'jbnContent' });
+    main.appendChild(contentWrap);
+  } else {
+    // tabbar 탭 active 상태만 갱신 (DOM 재생성 없이)
+    main.querySelectorAll('.jbn-tab').forEach(btn => {
+      const id = btn.dataset.route;
+      if (id) btn.classList.toggle('on', id === jbn_lastRoute);
     });
+    jbn_clear(contentWrap);
+  }
+
+  if (jbn_lastRoute === 'today')        contentWrap.appendChild(jbn_renderToday(me));
+  else if (jbn_lastRoute === 'stats')   contentWrap.appendChild(jbn_renderStats(me));
+  else if (jbn_lastRoute === 'admin' && me.is_super) {
+    const node = jbn_renderAdmin(me);
+    if (node) contentWrap.appendChild(node);
   }
 }
 
@@ -68,6 +97,7 @@ function jbn_renderTopBar(me) {
   for (const t of tabs) {
     bar.appendChild(jbn_el('button', {
       class: 'jbn-tab' + (jbn_lastRoute === t.id ? ' on' : ''),
+      dataset: { route: t.id },
       onclick: () => jbn_setRoute(t.id),
     }, t.label));
   }
