@@ -165,6 +165,9 @@ function jbn_renderTasksOfLocation(loc) {
 
 // ============================================================
 // 할일 편집기 (모달)
+// 신규/편집 모두 체크리스트를 모달 안에서 바로 추가·삭제·정렬 가능.
+// 신규일 때는 임시 배열(draftChecklist)에 쌓아뒀다가
+// 저장 시 task 생성 직후 한꺼번에 DB에 넣음.
 // ============================================================
 function jbn_openTaskEditor(taskId, locationId) {
   const isNew = !taskId;
@@ -181,14 +184,20 @@ function jbn_openTaskEditor(taskId, locationId) {
     ? []
     : jbnState.task_assignees.filter(a => a.task_id === taskId).map(a => a.member_id);
 
+  // 신규: 메모리에서만 관리하는 임시 체크리스트
+  // 편집: 실제 store 데이터를 참조 (추가·삭제·정렬은 즉시 store에 반영)
+  let draftChecklist = isNew
+    ? []
+    : null; // null = 편집 모드, store 직접 사용
+
   const root = jbn_el('div', {});
 
-  // 제목
+  // ── 제목 ──
   root.appendChild(jbn_el('label', { class: 'jbn-label' }, '제목'));
   const titleInput = jbn_el('input', { class: 'jbn-input', type: 'text', value: task.title });
   root.appendChild(titleInput);
 
-  // 담당자
+  // ── 담당자 ──
   root.appendChild(jbn_el('label', { class: 'jbn-label' }, '담당자 (복수 선택)'));
   const memWrap = jbn_el('div', { class: 'jbn-chips' });
   for (const m of [...jbnState.members].sort((a,b) => a.member_order - b.member_order)) {
@@ -205,7 +214,7 @@ function jbn_openTaskEditor(taskId, locationId) {
   }
   root.appendChild(memWrap);
 
-  // 주기
+  // ── 반복 주기 ──
   root.appendChild(jbn_el('label', { class: 'jbn-label' }, '반복 주기'));
   const recBox = jbn_el('div', { class: 'jbn-rec' });
   const typeRow = jbn_el('div', { class: 'jbn-chips' });
@@ -263,7 +272,6 @@ function jbn_openTaskEditor(taskId, locationId) {
       }
       recBody.appendChild(row);
     } else if (t === 'monthly_nth') {
-      // 달력에서 여러 날짜 선택 → (N째주, 요일) 로 정규화
       const summary = jbn_el('div', { class: 'jbn-hint' });
       const occs = d.occurrences || [];
       summary.textContent = occs.length
@@ -280,7 +288,6 @@ function jbn_openTaskEditor(taskId, locationId) {
             title: '대표 날짜들 선택 (예: 첫째주 수,목)',
           });
           if (!dates) return;
-          // 선택한 각 날짜 → (week, weekday) 추출하여 중복 제거
           const set = new Set();
           for (const iso of dates) {
             const dt = new Date(iso + 'T00:00');
@@ -302,7 +309,7 @@ function jbn_openTaskEditor(taskId, locationId) {
   }
   renderRecBody();
 
-  // 시작일
+  // ── 시작일 ──
   root.appendChild(jbn_el('label', { class: 'jbn-label' }, '시작일'));
   const startBtn = jbn_el('button', {
     class: 'jbn-btn',
@@ -314,53 +321,85 @@ function jbn_openTaskEditor(taskId, locationId) {
   }, task.start_date);
   root.appendChild(startBtn);
 
-  // 체크리스트 섹션 (신규/편집 모두 동일하게 표시)
+  // ── 체크리스트 (신규/편집 모두 표시) ──
   root.appendChild(jbn_el('div', { class: 'jbn-divider' }));
 
-  // 신규일 때는 "저장 후 추가 가능" 안내, 편집일 때는 바로 추가 가능
-  const clHeadRight = isNew
-    ? jbn_el('div', { class: 'jbn-hint', style: 'font-size:11px;color:#8FAA94' }, '저장 후 추가 가능')
-    : jbn_el('button', {
-        class: 'jbn-btn',
-        onclick: async (e) => {
-          e.preventDefault();
-          const v = await jbn_prompt('체크리스트 항목', '');
-          if (v) jbn_addChecklist(taskId, v);
-        },
-      }, '+ 추가');
-
-  root.appendChild(jbn_el('div', { class: 'jbn-section-head-mini' },
-    jbn_el('div', { class: 'jbn-label' }, '체크리스트'),
-    clHeadRight,
-  ));
+  const clHead = jbn_el('div', { class: 'jbn-section-head-mini' });
+  clHead.appendChild(jbn_el('div', { class: 'jbn-label' }, '체크리스트'));
+  const clAddBtn = jbn_el('button', { class: 'jbn-btn', onclick: async (e) => {
+    e.preventDefault();
+    const v = await jbn_prompt('체크리스트 항목', '');
+    if (!v) return;
+    if (isNew) {
+      // 신규: 임시 배열에 추가 후 목록 재렌더
+      draftChecklist.push({ id: 'draft_' + Date.now() + '_' + Math.random(), title: v, sort_order: draftChecklist.length });
+      renderChecklistArea();
+    } else {
+      // 편집: 즉시 store에 반영 후 목록 재렌더
+      jbn_addChecklist(taskId, v);
+      renderChecklistArea();
+    }
+  } }, '+ 추가');
+  clHead.appendChild(clAddBtn);
+  root.appendChild(clHead);
 
   const cl = jbn_el('div', { class: 'jbn-list' });
-  if (!isNew) {
-    const items = jbnState.checklist.filter(c => c.task_id === taskId).sort((a,b) => a.sort_order - b.sort_order);
+  root.appendChild(cl);
+
+  function renderChecklistArea() {
+    jbn_clear(cl);
+    const items = isNew
+      ? draftChecklist.slice().sort((a,b) => a.sort_order - b.sort_order)
+      : jbnState.checklist.filter(c => c.task_id === taskId).sort((a,b) => a.sort_order - b.sort_order);
+
     for (const c of items) {
       const r = jbn_el('div', { class: 'jbn-row', dataset: { dragId: c.id } });
       r.appendChild(jbn_el('span', { class: 'jbn-handle', dataset: { dragHandle: '1' } }, '☰'));
       r.appendChild(jbn_el('span', { class: 'jbn-row-title' }, c.title));
-      r.appendChild(jbn_el('button', { class: 'jbn-icon-btn', onclick: async () => {
+      r.appendChild(jbn_el('button', { class: 'jbn-icon-btn', onclick: async (e) => {
+        e.preventDefault();
         const v = await jbn_prompt('항목 이름', c.title);
-        if (v) jbn_updateChecklist(c.id, { title: v });
+        if (!v) return;
+        if (isNew) {
+          const idx = draftChecklist.findIndex(x => x.id === c.id);
+          if (idx >= 0) draftChecklist[idx].title = v;
+          renderChecklistArea();
+        } else {
+          jbn_updateChecklist(c.id, { title: v });
+        }
       } }, '✎'));
-      r.appendChild(jbn_el('button', { class: 'jbn-icon-btn', onclick: async () => {
+      r.appendChild(jbn_el('button', { class: 'jbn-icon-btn', onclick: async (e) => {
+        e.preventDefault();
         const ok = await jbn_confirm('삭제할까요?');
-        if (ok) jbn_deleteChecklist(c.id);
+        if (!ok) return;
+        if (isNew) {
+          draftChecklist = draftChecklist.filter(x => x.id !== c.id);
+          draftChecklist.forEach((x, i) => { x.sort_order = i; });
+          renderChecklistArea();
+        } else {
+          jbn_deleteChecklist(c.id);
+        }
       } }, '✕'));
       cl.appendChild(r);
     }
-    setTimeout(() => {
-      jbn_attachDragSort(cl, (orderedIds) => jbn_reorderChecklist(taskId, orderedIds));
-    }, 30);
-  } else {
-    cl.appendChild(jbn_el('div', { class: 'jbn-hint', style: 'padding:6px 2px' },
-      '할일을 먼저 저장하면 체크리스트를 추가할 수 있어요.'));
-  }
-  root.appendChild(cl);
 
-  // 저장 버튼
+    // 드래그 정렬
+    setTimeout(() => {
+      jbn_attachDragSort(cl, (orderedIds) => {
+        if (isNew) {
+          // 임시 배열 순서 갱신
+          const map = Object.fromEntries(draftChecklist.map(x => [x.id, x]));
+          orderedIds.forEach((id, i) => { if (map[id]) map[id].sort_order = i; });
+          draftChecklist = orderedIds.map(id => map[id]).filter(Boolean);
+        } else {
+          jbn_reorderChecklist(taskId, orderedIds);
+        }
+      });
+    }, 30);
+  }
+  renderChecklistArea();
+
+  // ── 저장 버튼 ──
   const saveBtn = jbn_el('button', {
     class: 'jbn-btn jbn-btn-primary',
     onclick: () => {
@@ -368,7 +407,6 @@ function jbn_openTaskEditor(taskId, locationId) {
       if (!title) { jbn_alert('제목을 입력하세요'); return; }
       task.title = title;
 
-      // 주기 데이터 검증
       if (task.recurrence_type === 'weekly' && !(task.recurrence_data.weekdays || []).length) {
         jbn_alert('요일을 하나 이상 선택하세요'); return;
       }
@@ -377,7 +415,6 @@ function jbn_openTaskEditor(taskId, locationId) {
       }
 
       if (isNew) {
-        // 새 할일 저장 후 곧바로 편집 모달로 재진입 (체크리스트 추가 가능)
         const newTask = jbn_addTask({
           location_id: task.location_id,
           title: task.title,
@@ -386,9 +423,10 @@ function jbn_openTaskEditor(taskId, locationId) {
           start_date: task.start_date,
           assignee_ids: assigneeIds,
         });
-        jbn_closeAllModals();
-        // 저장 직후 편집 모달 열기 → 체크리스트 추가 가능
-        setTimeout(() => jbn_openTaskEditor(newTask.id, locationId), 80);
+        // 임시 체크리스트를 실제 DB에 순서대로 등록
+        for (const c of draftChecklist.slice().sort((a,b) => a.sort_order - b.sort_order)) {
+          jbn_addChecklist(newTask.id, c.title);
+        }
       } else {
         jbn_updateTask(taskId, {
           title: task.title,
@@ -396,10 +434,10 @@ function jbn_openTaskEditor(taskId, locationId) {
           recurrence_data: task.recurrence_data,
           start_date: task.start_date,
         }, assigneeIds);
-        jbn_closeAllModals();
       }
+      jbn_closeAllModals();
     },
-  }, isNew ? '저장 후 편집' : '저장');
+  }, isNew ? '추가' : '저장');
   const cancelBtn = jbn_el('button', { class: 'jbn-btn', onclick: () => jbn_closeAllModals() }, '취소');
 
   jbn_openModal({ title: isNew ? '새 할일' : '할일 편집', body: root, footer: [cancelBtn, saveBtn] });
