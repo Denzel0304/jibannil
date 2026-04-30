@@ -57,12 +57,6 @@ export function jbn_weekday(iso) {
   return jbn_parseIso(iso).getDay();
 }
 
-// 해당 일자가 그 달의 몇 번째 같은 요일인가? (1~5)
-export function jbn_weekOfMonthByWeekday(iso) {
-  const d = jbn_parseIso(iso);
-  return Math.floor((d.getDate() - 1) / 7) + 1;
-}
-
 // 한국식 요일 이름
 export const JBN_WEEKDAY_KO = ['일','월','화','수','목','금','토'];
 

@@ -4,15 +4,13 @@
 // recurrence_data 형식:
 //   daily          : {}
 //   weekly         : { weekdays: [1,3,5] }              // 0=일~6=토
-//   monthly_nth    : { occurrences: [{week:1,wd:3},{week:1,wd:4}] }
-//                    week=1~5 (5는 마지막 주 의미로도 쓸 수 있음)
 //   every_n_days   : { n: 3 }                           // start_date 기준
 //
 // 함수 jbn_isOccurrenceOn(task, isoDate) → boolean
 // ============================================================
 
 import {
-  jbn_parseIso, jbn_diffDays, jbn_weekday, jbn_weekOfMonthByWeekday, jbn_isoDate,
+  jbn_parseIso, jbn_diffDays, jbn_weekday, jbn_isoDate,
 } from './util.js';
 
 export function jbn_isOccurrenceOn(task, iso) {
@@ -27,12 +25,6 @@ export function jbn_isOccurrenceOn(task, iso) {
   if (t === 'weekly') {
     const wd = jbn_weekday(iso);
     return Array.isArray(data.weekdays) && data.weekdays.includes(wd);
-  }
-
-  if (t === 'monthly_nth') {
-    const wd = jbn_weekday(iso);
-    const wk = jbn_weekOfMonthByWeekday(iso);
-    return Array.isArray(data.occurrences) && data.occurrences.some(o => o.wd === wd && o.week === wk);
   }
 
   if (t === 'every_n_days') {
@@ -52,11 +44,6 @@ export function jbn_recurrenceLabel(task) {
   if (t === 'weekly') {
     const names = ['일','월','화','수','목','금','토'];
     return '매주 ' + (d.weekdays || []).slice().sort().map(w => names[w]).join(',');
-  }
-  if (t === 'monthly_nth') {
-    const names = ['일','월','화','수','목','금','토'];
-    const labels = (d.occurrences || []).map(o => `${o.week}째주 ${names[o.wd]}`);
-    return '매월 ' + labels.join(', ');
   }
   if (t === 'every_n_days') return `${d.n}일마다`;
   return '';

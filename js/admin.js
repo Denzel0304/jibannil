@@ -222,7 +222,7 @@ function jbn_openTaskEditor(taskId, locationId) {
   const typeBtns = {};
   const typeArr = [
     ['daily','매일'], ['weekly','매주 요일'],
-    ['monthly_nth','매월 N째주 요일'], ['every_n_days','N일마다'],
+    ['every_n_days','N일마다'],
   ];
   for (const [v, label] of typeArr) {
     const b = jbn_el('button', {
@@ -232,7 +232,6 @@ function jbn_openTaskEditor(taskId, locationId) {
         task.recurrence_type = v;
         task.recurrence_data = (v === 'daily') ? {} :
           (v === 'weekly') ? { weekdays: [] } :
-          (v === 'monthly_nth') ? { occurrences: [] } :
           { n: null };   // every_n_days: 빈칸으로 시작
         Object.values(typeBtns).forEach(x => x.classList.remove('on'));
         b.classList.add('on');
@@ -272,36 +271,6 @@ function jbn_openTaskEditor(taskId, locationId) {
         row.appendChild(b);
       }
       recBody.appendChild(row);
-    } else if (t === 'monthly_nth') {
-      const summary = jbn_el('div', { class: 'jbn-hint' });
-      const occs = d.occurrences || [];
-      summary.textContent = occs.length
-        ? '선택: ' + occs.map(o => `${o.week}째 ${JBN_WEEKDAY_KO[o.wd]}요일`).join(', ')
-        : '아직 선택된 패턴 없음';
-      const pickBtn = jbn_el('button', {
-        class: 'jbn-btn',
-        onclick: async (e) => {
-          e.preventDefault();
-          const dates = await jbn_pickDate({
-            mode: 'multi',
-            initial: jbn_logicalToday(),
-            selected: [],
-            title: '대표 날짜들 선택 (예: 첫째주 수,목)',
-          });
-          if (!dates) return;
-          const set = new Set();
-          for (const iso of dates) {
-            const dt = new Date(iso + 'T00:00');
-            const wd = dt.getDay();
-            const wk = Math.floor((dt.getDate() - 1) / 7) + 1;
-            set.add(JSON.stringify({ week: wk, wd }));
-          }
-          d.occurrences = Array.from(set).map(s => JSON.parse(s)).sort((a,b)=>a.week-b.week||a.wd-b.wd);
-          task.recurrence_data = d;
-          renderRecBody();
-        },
-      }, '달력으로 선택');
-      recBody.append(pickBtn, summary);
     } else if (t === 'every_n_days') {
       const inp = jbn_el('input', {
         class: 'jbn-input', type: 'number', min: '1',
@@ -422,9 +391,6 @@ function jbn_openTaskEditor(taskId, locationId) {
       if (!task.recurrence_type) { jbn_alert('반복 주기를 선택하세요'); return; }
       if (task.recurrence_type === 'weekly' && !(task.recurrence_data.weekdays || []).length) {
         jbn_alert('요일을 하나 이상 선택하세요'); return;
-      }
-      if (task.recurrence_type === 'monthly_nth' && !(task.recurrence_data.occurrences || []).length) {
-        jbn_alert('달력에서 패턴을 선택하세요'); return;
       }
       if (task.recurrence_type === 'every_n_days' && !task.recurrence_data.n) {
         jbn_alert('일 수를 입력하세요'); return;
