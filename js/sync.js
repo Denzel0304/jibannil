@@ -64,29 +64,101 @@ window.addEventListener('online', () => {
 
 // ============================================================
 // Realtime 이벤트 처리
-// 로컬 데이터는 즉시 머지, emitChange 는 80ms 디바운스로 묶음
+//
+// 핵심 문제:
+//   Supabase postgres_changes 는 RLS 환경에서 ev.old 의 컬럼값을
+//   신뢰할 수 없음 (특히 task_assignees 같은 복합PK 테이블).
+//   ev.new 도 INSERT 시 일부 컬럼이 누락되는 경우가 있음.
+//
+// 해결 전략:
+//   - "관계 테이블" (task_assignees): 이벤트가 오는 즉시 서버에서
+//     해당 테이블 전체를 다시 fetch → 로컬 교체. 가장 확실하고 단순.
+//   - "단순 테이블" (나머지): ev.new / ev.old 를 그대로 머지/삭제.
+//     단, DELETE 시 ev.old 가 빈 객체인 경우 refetch 로 폴백.
+//   - 드래그 정렬 echo (sort_order만 변경) 는 쿨다운 중 무시.
+//   - 모든 변경은 80ms 디바운스로 묶어 1회 재렌더.
 // ============================================================
+
+// 서버에서 특정 테이블 전체를 다시 가져와 로컬 교체
+const jbn_supaTableOf = {
+  members:        'jibannil_members',
+  locations:      'jibannil_locations',
+  tasks:          'jibannil_tasks',
+  task_assignees: 'jibannil_task_assignees',
+  checklist:      'jibannil_checklist',
+  completions:    'jibannil_completions',
+  postponements:  'jibannil_postponements',
+};
+
+async function jbn_refetchTable(table) {
+  const supaTable = jbn_supaTableOf[table];
+  if (!supaTable) return;
+  try {
+    const { data, error } = await jbnSupa.from(supaTable).select('*');
+    if (error) { console.error('[RT] refetch error', table, error); return; }
+    jbnState[table] = data || [];
+  } catch (e) {
+    console.error('[RT] refetch exception', table, e);
+  }
+}
+
+// 관계 테이블: ev.old 신뢰 불가 → 무조건 refetch
+const JBN_ALWAYS_REFETCH = new Set(['task_assignees']);
+
 function jbn_applyRt(table, ev) {
-  if (ev.eventType === 'INSERT' || ev.eventType === 'UPDATE') {
-    // 드래그 정렬 중에 sort_order 만 바뀌는 Realtime 이벤트는 무시
-    // (내가 방금 보낸 reorder op의 echo가 돌아오는 것 — 로컬이 이미 정답)
-    if (jbn_dragLockState.locked) return;
-    const isOnlySortOrder = ev.eventType === 'UPDATE'
-      && ev.new && ev.old
-      && Object.keys(ev.new).length <= 3   // id, sort_order, updated_at 정도
+  // 드래그 정렬 echo 무시
+  if (jbn_dragLockState.locked) {
+    _scheduleBatch();
+    return;
+  }
+
+  if (JBN_ALWAYS_REFETCH.has(table)) {
+    // task_assignees: refetch 후 배치 렌더
+    jbn_refetchTable(table).then(() => _scheduleBatch());
+    return;
+  }
+
+  if (ev.eventType === 'INSERT') {
+    if (ev.new && Object.keys(ev.new).length > 0) {
+      _mergeLocal(table, ev.new);
+    } else {
+      jbn_refetchTable(table).then(() => _scheduleBatch());
+      return;
+    }
+    // tasks INSERT: assignees가 별도 이벤트로 오므로 함께 refetch해야 담당자가 보임
+    if (table === 'tasks') {
+      jbn_refetchTable('task_assignees').then(() => _scheduleBatch());
+      return;
+    }
+  } else if (ev.eventType === 'UPDATE') {
+    const isOnlySortOrder = ev.new && ev.old
+      && Object.keys(ev.new).length <= 3
       && 'sort_order' in ev.new
       && !('title' in ev.new) && !('name' in ev.new);
-    if (isOnlySortOrder && jbn_dragLockState.reorderCooldown) return;
-    _mergeLocal(table, ev.new);
-  } else if (ev.eventType === 'DELETE') {
-    if (table === 'task_assignees') {
-      _deleteLocal(table, { task_id: ev.old.task_id, member_id: ev.old.member_id });
+    if (isOnlySortOrder && jbn_dragLockState.reorderCooldown) {
+      _scheduleBatch();
+      return;
+    }
+    if (ev.new && Object.keys(ev.new).length > 0) {
+      _mergeLocal(table, ev.new);
     } else {
-      _deleteLocal(table, { id: ev.old.id });
+      jbn_refetchTable(table).then(() => _scheduleBatch());
+      return;
+    }
+  } else if (ev.eventType === 'DELETE') {
+    const oldId = ev.old?.id;
+    if (oldId) {
+      _deleteLocal(table, { id: oldId });
+    } else {
+      jbn_refetchTable(table).then(() => _scheduleBatch());
+      return;
     }
   }
 
-  // 연속 이벤트 묶기
+  _scheduleBatch();
+}
+
+function _scheduleBatch() {
   clearTimeout(jbn_rtBatchTimer);
   jbn_rtBatchTimer = setTimeout(() => {
     jbn_saveSnapshot();
