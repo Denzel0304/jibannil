@@ -133,7 +133,7 @@ export function jbn_attachSwipe(el, { onSwipeLeft, onSwipeRight }) {
 // 실시간 동기화 재렌더 차단: jbn_dragLockState.locked = true 동안
 // render.js 가 paint 를 미룸.
 // ============================================================
-export const jbn_dragLockState = { locked: false };
+export const jbn_dragLockState = { locked: false, reorderCooldown: false, _cooldownTimer: null };
 
 export function jbn_attachDragSort(container, onCommit) {
   let dragging     = null;

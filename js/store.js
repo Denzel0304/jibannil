@@ -192,6 +192,13 @@ async function jbn_executeOp(op) {
     for (const [k,v] of Object.entries(match)) q = q.eq(k, v);
     const { error } = await q;
     if (error) throw error;
+  } else if (kind === 'reorder') {
+    // reorder: rows = [{id, sort_order}, ...] 를 순서대로 update
+    // 병렬로 보내면 Realtime 이벤트 순서가 뒤섞이므로 직렬 처리
+    for (const { id, sort_order } of op.rows) {
+      const { error } = await jbnSupa.from(table).update({ sort_order }).eq('id', id);
+      if (error) throw error;
+    }
   }
 }
 

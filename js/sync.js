@@ -19,6 +19,7 @@ import {
   jbn_saveSnapshot,
 } from './store.js';
 import { jbn_uuid } from './util.js';
+import { jbn_dragLockState } from './interactions.js';
 
 // ============================================================
 // Realtime 구독
@@ -67,6 +68,15 @@ window.addEventListener('online', () => {
 // ============================================================
 function jbn_applyRt(table, ev) {
   if (ev.eventType === 'INSERT' || ev.eventType === 'UPDATE') {
+    // 드래그 정렬 중에 sort_order 만 바뀌는 Realtime 이벤트는 무시
+    // (내가 방금 보낸 reorder op의 echo가 돌아오는 것 — 로컬이 이미 정답)
+    if (jbn_dragLockState.locked) return;
+    const isOnlySortOrder = ev.eventType === 'UPDATE'
+      && ev.new && ev.old
+      && Object.keys(ev.new).length <= 3   // id, sort_order, updated_at 정도
+      && 'sort_order' in ev.new
+      && !('title' in ev.new) && !('name' in ev.new);
+    if (isOnlySortOrder && jbn_dragLockState.reorderCooldown) return;
     _mergeLocal(table, ev.new);
   } else if (ev.eventType === 'DELETE') {
     if (table === 'task_assignees') {
@@ -147,13 +157,11 @@ export function jbn_deleteLocation(id) {
 }
 
 export function jbn_reorderLocations(orderedIds) {
-  // 로컬은 silent 머지 후 한 번만 emit (N개 연속 emitChange 방지)
   orderedIds.forEach((id, i) => jbn_localUpsertSilent('locations', { id, sort_order: i }));
   jbn_saveSnapshot();
   jbn_emitChange('reorder:locations');
-  orderedIds.forEach((id, i) => {
-    jbn_enqueue({ table: 'jibannil_locations', op: 'update', payload: { sort_order: i }, match: { id } });
-  });
+  // 단일 reorder op로 직렬 처리 — N개 개별 enqueue 시 Realtime echo 순서 뒤섞힘 방지
+  _enqueueReorder('jibannil_locations', orderedIds);
 }
 
 // ============================================================
@@ -220,9 +228,7 @@ export function jbn_reorderTasks(locationId, orderedIds) {
   orderedIds.forEach((id, i) => jbn_localUpsertSilent('tasks', { id, sort_order: i }));
   jbn_saveSnapshot();
   jbn_emitChange('reorder:tasks');
-  orderedIds.forEach((id, i) => {
-    jbn_enqueue({ table: 'jibannil_tasks', op: 'update', payload: { sort_order: i }, match: { id } });
-  });
+  _enqueueReorder('jibannil_tasks', orderedIds);
 }
 
 // ============================================================
@@ -256,9 +262,7 @@ export function jbn_reorderChecklist(taskId, orderedIds) {
   orderedIds.forEach((id, i) => jbn_localUpsertSilent('checklist', { id, sort_order: i }));
   jbn_saveSnapshot();
   jbn_emitChange('reorder:checklist');
-  orderedIds.forEach((id, i) => {
-    jbn_enqueue({ table: 'jibannil_checklist', op: 'update', payload: { sort_order: i }, match: { id } });
-  });
+  _enqueueReorder('jibannil_checklist', orderedIds);
 }
 
 // ============================================================
@@ -346,4 +350,18 @@ export function jbn_renameMember(memberId, name) {
 export function jbn_setMemberColor(memberId, color) {
   jbn_localUpsert('members', { id: memberId, accent_color: color });
   jbn_enqueue({ table: 'jibannil_members', op: 'update', payload: { accent_color: color }, match: { id: memberId } });
+}
+// ============================================================
+// reorder 헬퍼: 단일 op로 묶어서 직렬 처리
+// store.js executeOp 의 'reorder' 타입이 처리함
+// ============================================================
+function _enqueueReorder(table, orderedIds) {
+  const rows = orderedIds.map((id, i) => ({ id, sort_order: i }));
+  jbn_enqueue({ table, op: 'reorder', rows });
+  // reorder echo가 Realtime으로 돌아오는 동안 쿨다운 (2초)
+  jbn_dragLockState.reorderCooldown = true;
+  clearTimeout(jbn_dragLockState._cooldownTimer);
+  jbn_dragLockState._cooldownTimer = setTimeout(() => {
+    jbn_dragLockState.reorderCooldown = false;
+  }, 2000);
 }
