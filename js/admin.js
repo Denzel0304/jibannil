@@ -388,6 +388,7 @@ function jbn_openTaskEditor(taskId, locationId) {
           renderChecklistArea();
         } else {
           jbn_deleteChecklist(c.id);
+          renderChecklistArea();
         }
       } }, '✕'));
       cl.appendChild(r);
