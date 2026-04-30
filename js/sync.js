@@ -2,22 +2,40 @@
 // js/sync.js
 //
 // (1) Realtime 구독 — 다른 기기/브라우저에서 일어난 변경을 실시간 반영.
+//     - postgres_changes 로 모든 테이블 구독
+//     - 연속 이벤트(드래그 순서 N개)는 80ms 디바운스로 묶어 1회 재렌더
+//     - 채널 재구독: 기존 채널 제거 후 새로 생성 (auth 변화 대응)
+//     - CHANNEL_ERROR / TIMED_OUT 시 3초 후 자동 재연결
+//
 // (2) 고수준 mutation API — UI 는 이 함수들만 호출.
 //     각 함수는: 1) 로컬 즉시 반영 → 2) 큐에 enqueue (서버는 백그라운드)
 // ============================================================
 
 import { jbnSupa, jbn_me } from './auth.js';
 import {
-  jbnState, jbn_localUpsert, jbn_localDelete, jbn_enqueue, jbn_emitChange,
+  jbnState,
+  jbn_localUpsert, jbn_localUpsertSilent, jbn_localDelete,
+  jbn_enqueue, jbn_emitChange,
+  jbn_saveSnapshot,
 } from './store.js';
 import { jbn_uuid } from './util.js';
 
-// ---------- Realtime ----------
-let jbn_rtChannel = null;
+// ============================================================
+// Realtime 구독
+// ============================================================
+let jbn_rtChannel    = null;
+let jbn_rtBatchTimer = null;
 
 export function jbn_startRealtime() {
-  if (jbn_rtChannel) return;
-  jbn_rtChannel = jbnSupa.channel('jbn_room_realtime')
+  // 기존 채널 제거
+  if (jbn_rtChannel) {
+    try { jbnSupa.removeChannel(jbn_rtChannel); } catch (e) { console.warn('[RT] removeChannel', e); }
+    jbn_rtChannel = null;
+  }
+
+  // 매번 유니크한 채널명 → 이전 구독 좀비 방지
+  jbn_rtChannel = jbnSupa
+    .channel('jbn_rt_' + Date.now())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jibannil_members'        }, ev => jbn_applyRt('members',        ev))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jibannil_locations'      }, ev => jbn_applyRt('locations',      ev))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jibannil_tasks'          }, ev => jbn_applyRt('tasks',          ev))
@@ -25,26 +43,40 @@ export function jbn_startRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jibannil_checklist'      }, ev => jbn_applyRt('checklist',      ev))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jibannil_completions'    }, ev => jbn_applyRt('completions',    ev))
     .on('postgres_changes', { event: '*', schema: 'public', table: 'jibannil_postponements'  }, ev => jbn_applyRt('postponements',  ev))
-    .subscribe();
+    .subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('[RT] subscribed OK');
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.warn('[RT] ' + status + ' — retry in 3s', err);
+        setTimeout(jbn_startRealtime, 3000);
+      } else if (status === 'CLOSED') {
+        console.warn('[RT] channel closed');
+      }
+    });
 }
 
-// Realtime 이벤트를 즉시 로컬에 반영하되, emitChange 는 디바운스로 묶어
-// 연속 업데이트(드래그 순서 변경 등)가 한 번의 재렌더로 처리되게 함.
-let jbn_rtBatchTimer = null;
-const jbn_rtBatch = [];
+// 온라인 복귀 시 realtime 재연결
+window.addEventListener('online', () => {
+  console.log('[RT] online → restart');
+  setTimeout(jbn_startRealtime, 800);
+});
 
+// ============================================================
+// Realtime 이벤트 처리
+// 로컬 데이터는 즉시 머지, emitChange 는 80ms 디바운스로 묶음
+// ============================================================
 function jbn_applyRt(table, ev) {
-  // 로컬 데이터는 즉시 머지 (emitChange 없이)
   if (ev.eventType === 'INSERT' || ev.eventType === 'UPDATE') {
-    _jbn_mergeLocal(table, ev.new);
+    _mergeLocal(table, ev.new);
   } else if (ev.eventType === 'DELETE') {
     if (table === 'task_assignees') {
-      _jbn_deleteLocal(table, { task_id: ev.old.task_id, member_id: ev.old.member_id });
+      _deleteLocal(table, { task_id: ev.old.task_id, member_id: ev.old.member_id });
     } else {
-      _jbn_deleteLocal(table, { id: ev.old.id });
+      _deleteLocal(table, { id: ev.old.id });
     }
   }
-  // 렌더는 디바운스 (80ms 내 추가 이벤트 있으면 합산)
+
+  // 연속 이벤트 묶기
   clearTimeout(jbn_rtBatchTimer);
   jbn_rtBatchTimer = setTimeout(() => {
     jbn_saveSnapshot();
@@ -52,24 +84,26 @@ function jbn_applyRt(table, ev) {
   }, 80);
 }
 
-// emitChange 없이 순수 데이터만 머지하는 내부 헬퍼
-function _jbn_mergeLocal(table, row) {
+function _pkOf(table, row) {
+  if (table === 'task_assignees') return `${row.task_id}:${row.member_id}`;
+  return row.id;
+}
+
+function _mergeLocal(table, row) {
   const arr = jbnState[table];
-  const pk = _jbn_pkOf(table, row);
-  const idx = arr.findIndex(r => _jbn_pkOf(table, r) === pk);
+  if (!arr) return;
+  const pk = _pkOf(table, row);
+  const idx = arr.findIndex(r => _pkOf(table, r) === pk);
   if (idx >= 0) arr[idx] = { ...arr[idx], ...row };
   else arr.push(row);
 }
 
-function _jbn_deleteLocal(table, match) {
-  const arr = jbnState[table];
-  const next = arr.filter(r => !Object.entries(match).every(([k,v]) => r[k] === v));
-  if (next.length !== arr.length) jbnState[table] = next;
-}
-
-function _jbn_pkOf(table, row) {
-  if (table === 'task_assignees') return `${row.task_id}:${row.member_id}`;
-  return row.id;
+function _deleteLocal(table, match) {
+  if (!jbnState[table]) return;
+  const next = jbnState[table].filter(
+    r => !Object.entries(match).every(([k, v]) => r[k] === v)
+  );
+  if (next.length !== jbnState[table].length) jbnState[table] = next;
 }
 
 // ============================================================
@@ -79,7 +113,9 @@ export function jbn_addLocation(name) {
   const row = {
     id: jbn_uuid(),
     name,
-    sort_order: (jbnState.locations.length ? Math.max(...jbnState.locations.map(l => l.sort_order)) + 1 : 0),
+    sort_order: jbnState.locations.length
+      ? Math.max(...jbnState.locations.map(l => l.sort_order)) + 1
+      : 0,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -89,12 +125,12 @@ export function jbn_addLocation(name) {
 }
 
 export function jbn_renameLocation(id, name) {
-  jbn_localUpsert('locations', { id, name, updated_at: new Date().toISOString() });
-  jbn_enqueue({ table: 'jibannil_locations', op: 'update', payload: { name }, match: { id } });
+  const updated_at = new Date().toISOString();
+  jbn_localUpsert('locations', { id, name, updated_at });
+  jbn_enqueue({ table: 'jibannil_locations', op: 'update', payload: { name, updated_at }, match: { id } });
 }
 
 export function jbn_deleteLocation(id) {
-  // 캐스케이드는 서버에서. 로컬도 같이 정리.
   jbnState.tasks
     .filter(t => t.location_id === id)
     .forEach(t => {
@@ -105,13 +141,17 @@ export function jbn_deleteLocation(id) {
     });
   jbnState.tasks     = jbnState.tasks.filter(t => t.location_id !== id);
   jbnState.locations = jbnState.locations.filter(l => l.id !== id);
+  jbn_saveSnapshot();
   jbn_emitChange('cascadeDelete:location');
   jbn_enqueue({ table: 'jibannil_locations', op: 'delete', match: { id } });
 }
 
 export function jbn_reorderLocations(orderedIds) {
+  // 로컬은 silent 머지 후 한 번만 emit (N개 연속 emitChange 방지)
+  orderedIds.forEach((id, i) => jbn_localUpsertSilent('locations', { id, sort_order: i }));
+  jbn_saveSnapshot();
+  jbn_emitChange('reorder:locations');
   orderedIds.forEach((id, i) => {
-    jbn_localUpsert('locations', { id, sort_order: i });
     jbn_enqueue({ table: 'jibannil_locations', op: 'update', payload: { sort_order: i }, match: { id } });
   });
 }
@@ -120,7 +160,6 @@ export function jbn_reorderLocations(orderedIds) {
 // Tasks
 // ============================================================
 export function jbn_addTask(payload) {
-  // payload: location_id, title, recurrence_type, recurrence_data, start_date, assignee_ids[]
   const row = {
     id: jbn_uuid(),
     location_id: payload.location_id,
@@ -130,7 +169,7 @@ export function jbn_addTask(payload) {
     start_date: payload.start_date,
     sort_order: jbnState.tasks
       .filter(t => t.location_id === payload.location_id)
-      .reduce((m,t)=>Math.max(m,t.sort_order+1),0),
+      .reduce((m, t) => Math.max(m, t.sort_order + 1), 0),
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -172,13 +211,16 @@ export function jbn_deleteTask(id) {
   jbnState.completions    = jbnState.completions.filter(c => c.task_id !== id);
   jbnState.postponements  = jbnState.postponements.filter(p => p.task_id !== id);
   jbnState.tasks          = jbnState.tasks.filter(t => t.id !== id);
+  jbn_saveSnapshot();
   jbn_emitChange('cascadeDelete:task');
   jbn_enqueue({ table: 'jibannil_tasks', op: 'delete', match: { id } });
 }
 
 export function jbn_reorderTasks(locationId, orderedIds) {
+  orderedIds.forEach((id, i) => jbn_localUpsertSilent('tasks', { id, sort_order: i }));
+  jbn_saveSnapshot();
+  jbn_emitChange('reorder:tasks');
   orderedIds.forEach((id, i) => {
-    jbn_localUpsert('tasks', { id, sort_order: i });
     jbn_enqueue({ table: 'jibannil_tasks', op: 'update', payload: { sort_order: i }, match: { id } });
   });
 }
@@ -211,14 +253,16 @@ export function jbn_deleteChecklist(id) {
 }
 
 export function jbn_reorderChecklist(taskId, orderedIds) {
+  orderedIds.forEach((id, i) => jbn_localUpsertSilent('checklist', { id, sort_order: i }));
+  jbn_saveSnapshot();
+  jbn_emitChange('reorder:checklist');
   orderedIds.forEach((id, i) => {
-    jbn_localUpsert('checklist', { id, sort_order: i });
     jbn_enqueue({ table: 'jibannil_checklist', op: 'update', payload: { sort_order: i }, match: { id } });
   });
 }
 
 // ============================================================
-// Completions (완료)
+// Completions (완료 체크)
 // ============================================================
 export function jbn_markComplete(taskId, checklistId, targetDate) {
   const me = jbn_me();
@@ -263,7 +307,6 @@ export function jbn_unmarkComplete(taskId, checklistId, targetDate) {
 export function jbn_postponeTask(taskId, originalDate, postponedTo) {
   const me = jbn_me();
   if (!me) return;
-  // 동일 (task, member, original_date) 가 있으면 update, 없으면 insert
   const existing = jbnState.postponements.find(p =>
     p.task_id === taskId && p.member_id === me.id && p.original_date === originalDate
   );
@@ -288,7 +331,7 @@ export function jbn_postponeTask(taskId, originalDate, postponedTo) {
 }
 
 // ============================================================
-// Members (super 만)
+// Members
 // ============================================================
 export function jbn_setSuper(memberId, isSuper) {
   jbn_localUpsert('members', { id: memberId, is_super: isSuper });

@@ -103,14 +103,7 @@ function jbn_renderLocationsAdmin() {
   wrap.appendChild(list);
 
   setTimeout(() => {
-    jbn_attachDragSort(list, (orderedIds) => {
-      // 드래그 락을 reorderLocations 완료 후까지 연장 (Realtime 재렌더 차단)
-      import('./interactions.js').then(mod => { mod.jbn_dragLockState.locked = true; });
-      jbn_reorderLocations(orderedIds);
-      setTimeout(() => {
-        import('./interactions.js').then(mod => { mod.jbn_dragLockState.locked = false; });
-      }, 800);
-    });
+    jbn_attachDragSort(list, (orderedIds) => jbn_reorderLocations(orderedIds));
   }, 30);
   return wrap;
 }

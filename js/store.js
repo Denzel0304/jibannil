@@ -203,3 +203,12 @@ window.addEventListener('online', () => {
 
 // 일정 주기로 한 번씩 (혹시 빠진 게 있으면)
 setInterval(() => { if (navigator.onLine) jbn_flushQueue(); }, 30000);
+
+// emitChange/saveSnapshot 없이 데이터만 머지 (reorder 등 배치 작업용)
+export function jbn_localUpsertSilent(table, row) {
+  const arr = jbnState[table];
+  const pk = jbn_pkOf(table, row);
+  const idx = arr.findIndex(r => jbn_pkOf(table, r) === pk);
+  if (idx >= 0) arr[idx] = { ...arr[idx], ...row };
+  else arr.push(row);
+}
