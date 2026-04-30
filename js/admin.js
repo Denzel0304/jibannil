@@ -137,7 +137,9 @@ function jbn_renderTasksOfLocation(loc) {
     titleWrap.appendChild(jbn_el('div', {}, t.title));
     titleWrap.appendChild(jbn_el('div', { class: 'jbn-row-sub' }, jbn_recurrenceLabel(t)));
     const assignees = jbnState.task_assignees.filter(a => a.task_id === t.id)
-      .map(a => jbnState.members.find(m => m.id === a.member_id)?.display_name).filter(Boolean);
+      .map(a => jbnState.members.find(m => m.id === a.member_id)).filter(Boolean)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map(m => m.display_name);
     if (assignees.length) titleWrap.appendChild(jbn_el('div', { class: 'jbn-row-sub' }, '담당: ' + assignees.join(', ')));
     titleWrap.addEventListener('click', () => jbn_openTaskEditor(t.id, loc.id));
     row.appendChild(titleWrap);
