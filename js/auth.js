@@ -55,12 +55,24 @@ export async function jbn_initAuth() {
   const { data: { session } } = await jbnSupa.auth.getSession();
   jbn_currentSession = session;
 
-  jbnSupa.auth.onAuthStateChange((_evt, sess) => {
-    jbn_currentSession = sess;
-    if (!sess) {
-      jbn_currentMember = null;
+  jbnSupa.auth.onAuthStateChange((evt, sess) => {
+    // SIGNED_OUT 만 진짜 로그아웃. 토큰 갱신 중 일시적 null 은 무시.
+    if (evt === 'SIGNED_OUT') {
+      jbn_currentSession = null;
+      jbn_currentMember  = null;
+      jbn_emitAuth();
+      return;
     }
-    jbn_emitAuth();
+    if (sess) {
+      jbn_currentSession = sess;
+      jbn_scheduleRefreshWatchdog();
+    }
+    // 세션은 있는데 멤버 정보가 없으면(로그인 직후 등) 재로드
+    if (sess && !jbn_currentMember) {
+      jbn_loadMyMember().then(() => jbn_emitAuth()).catch(() => jbn_emitAuth());
+    } else {
+      jbn_emitAuth();
+    }
   });
 
   if (session) {
@@ -136,7 +148,8 @@ async function jbn_safeRefresh() {
     // 다른 곳에서 8초 이내에 이미 갱신 시도중. 잠깐 기다렸다 세션만 다시 읽어옴.
     await new Promise(r => setTimeout(r, 1500));
     const { data: { session } } = await jbnSupa.auth.getSession();
-    jbn_currentSession = session;
+    // null 이면 기존 세션 유지 (일시적 네트워크 오류 대비)
+    if (session) jbn_currentSession = session;
     return;
   }
   localStorage.setItem(lockKey, String(now));
@@ -146,8 +159,9 @@ async function jbn_safeRefresh() {
       console.warn('refresh failed', error.message);
       // 실패해도 세션이 살아있을 수 있으니 다시 읽기
       const { data: { session } } = await jbnSupa.auth.getSession();
-      jbn_currentSession = session;
-    } else {
+      // null 이면 기존 세션 유지 (네트워크 오류와 진짜 만료 구분 불가 → 보수적으로)
+      if (session) jbn_currentSession = session;
+    } else if (data.session) {
       jbn_currentSession = data.session;
     }
   } finally {

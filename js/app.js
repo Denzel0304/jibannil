@@ -24,9 +24,16 @@ async function jbn_boot() {
   // 3) UI 진입
   jbn_routeByAuth();
 
-  // 4) 인증 상태 바뀌면 다시 라우팅
-  jbn_onAuthChange(() => jbn_routeByAuth());
+  // 4) 인증 상태 바뀌면 다시 라우팅 (debounce: 토큰 갱신 중 일시적 null 무시)
+  let jbn_authRouteTimer = null;
+  jbn_onAuthChange(() => {
+    clearTimeout(jbn_authRouteTimer);
+    jbn_authRouteTimer = setTimeout(() => jbn_routeByAuth(), 300);
+  });
 }
+
+// 이미 메인 화면이 떠 있으면 재진입하지 않음 (세션 일시 null → 화면 깜빡임 방지)
+let jbn_mainRendered = false;
 
 async function jbn_routeByAuth() {
   const sess = jbn_session();
@@ -34,17 +41,22 @@ async function jbn_routeByAuth() {
   const app = jbn_$('#jbnApp');
   if (!app) return;
   if (!sess) {
+    // 이미 메인 화면이면 세션 복구 대기 (300ms debounce 로 걸러지지만 혹시 모를 이중 방어)
+    if (jbn_mainRendered) return;
     jbn_renderLogin();
     return;
   }
   if (sess && !me) {
     // 로그인은 했는데 jibannil_members 에 등록 안 된 사용자
-    jbn_renderUnregistered();
+    if (!jbn_mainRendered) jbn_renderUnregistered();
     return;
   }
-  // 정상 진입
-  jbn_renderMainShell();
-  jbn_setRoute('today');
+  // 정상 진입 — 이미 메인이 떠있으면 shell 재생성 없이 데이터만 fetch
+  if (!jbn_mainRendered) {
+    jbn_renderMainShell();
+    jbn_mainRendered = true;
+    jbn_setRoute('today');
+  }
   // 백그라운드로 서버 fetch + realtime
   if (navigator.onLine) {
     jbn_fetchAll().catch(e => console.warn(e));
@@ -60,6 +72,7 @@ function jbn_renderMainShell() {
 }
 
 function jbn_renderLogin() {
+  jbn_mainRendered = false;   // 진짜 로그아웃 → 플래그 리셋
   const app = jbn_$('#jbnApp');
   jbn_clear(app);
   const wrap = jbn_el('div', { class: 'jbn-login' });
