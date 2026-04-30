@@ -41,8 +41,7 @@ async function jbn_routeByAuth() {
   const app = jbn_$('#jbnApp');
   if (!app) return;
   if (!sess) {
-    // 이미 메인 화면이면 세션 복구 대기 (300ms debounce 로 걸러지지만 혹시 모를 이중 방어)
-    if (jbn_mainRendered) return;
+    // auth.js 에서 SIGNED_OUT 일 때만 여기 도달하므로 무조건 로그인 화면으로
     jbn_renderLogin();
     return;
   }
