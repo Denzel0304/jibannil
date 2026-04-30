@@ -290,12 +290,14 @@ function jbn_renderTaskRow(me, item, todayIso) {
     onSwipeLeft: () => jbn_openPostponeMenu(task, occurrenceDate, todayIso),
   });
 
-  // 단일 클릭 (체크리스트 없을 때만)
+  // 단일 클릭 (체크리스트 없을 때만) — body 클릭 또는 별표 클릭
   if (!cls.length) {
-    body.addEventListener('click', () => {
+    const toggleDone = () => {
       if (fullyDone) jbn_unmarkComplete(task.id, null, occurrenceDate);
       else { jbn_markComplete(task.id, null, occurrenceDate); jbn_playCompleteSound(); }
-    });
+    };
+    body.addEventListener('click', toggleDone);
+    star.addEventListener('click', toggleDone);
   }
   return row;
 }
