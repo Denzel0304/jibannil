@@ -103,7 +103,14 @@ function jbn_renderLocationsAdmin() {
   wrap.appendChild(list);
 
   setTimeout(() => {
-    jbn_attachDragSort(list, (orderedIds) => jbn_reorderLocations(orderedIds));
+    jbn_attachDragSort(list, (orderedIds) => {
+      // 드래그 락을 reorderLocations 완료 후까지 연장 (Realtime 재렌더 차단)
+      import('./interactions.js').then(mod => { mod.jbn_dragLockState.locked = true; });
+      jbn_reorderLocations(orderedIds);
+      setTimeout(() => {
+        import('./interactions.js').then(mod => { mod.jbn_dragLockState.locked = false; });
+      }, 800);
+    });
   }, 30);
   return wrap;
 }
@@ -396,10 +403,6 @@ function jbn_openTaskEditor(taskId, locationId) {
 // ============================================================
 function jbn_renderMembersAdmin(me) {
   const wrap = jbn_el('div', {});
-  wrap.appendChild(jbn_el('h2', { class: 'jbn-h2' }, '구성원'));
-  wrap.appendChild(jbn_el('div', { class: 'jbn-hint' },
-    '계정 추가는 Supabase 콘솔 → Authentication → Users 에서 만든 뒤, ' +
-    'SQL Editor 에서 jibannil_members 에 INSERT 해야 합니다. (README 참고)'));
   const list = jbn_el('div', { class: 'jbn-list' });
   const sorted = [...jbnState.members].sort((a,b) => a.member_order - b.member_order);
   for (const m of sorted) {
@@ -409,21 +412,26 @@ function jbn_renderMembersAdmin(me) {
       style: `background:${m.accent_color || '#7BC47F'}`,
     }));
     row.appendChild(jbn_el('span', { class: 'jbn-row-title' }, m.display_name + (m.is_super ? ' ⭐' : '')));
-    row.appendChild(jbn_el('button', {
-      class: 'jbn-icon-btn',
-      onclick: async () => {
-        const v = await jbn_prompt('표시 이름', m.display_name);
-        if (v) jbn_renameMember(m.id, v);
-      },
-    }, '✎'));
-    row.appendChild(jbn_el('button', {
-      class: 'jbn-icon-btn',
-      onclick: async () => {
-        const v = await jbn_prompt('색상 (#RRGGBB)', m.accent_color || '#7BC47F');
-        if (v && /^#[0-9A-Fa-f]{6}$/.test(v)) jbn_setMemberColor(m.id, v);
-        else if (v) jbn_alert('형식: #7BC47F');
-      },
-    }, '🎨'));
+
+    // 이름·색상 변경: founder만 가능 (본인 포함 모든 구성원 대상)
+    if (me.is_founder) {
+      row.appendChild(jbn_el('button', {
+        class: 'jbn-icon-btn',
+        onclick: async () => {
+          const v = await jbn_prompt('표시 이름', m.display_name);
+          if (v) jbn_renameMember(m.id, v);
+        },
+      }, '✎'));
+      row.appendChild(jbn_el('button', {
+        class: 'jbn-icon-btn',
+        onclick: async () => {
+          const v = await jbn_prompt('색상 (#RRGGBB)', m.accent_color || '#7BC47F');
+          if (v && /^#[0-9A-Fa-f]{6}$/.test(v)) jbn_setMemberColor(m.id, v);
+          else if (v) jbn_alert('형식: #7BC47F');
+        },
+      }, '🎨'));
+    }
+
     // 권한 부여/해제: founder(나)만 가능. 본인·다른 founder 행은 건드릴 수 없음.
     if (me.is_founder && m.id !== me.id && !m.is_founder) {
       row.appendChild(jbn_el('button', {

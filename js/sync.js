@@ -28,16 +28,48 @@ export function jbn_startRealtime() {
     .subscribe();
 }
 
+// Realtime 이벤트를 즉시 로컬에 반영하되, emitChange 는 디바운스로 묶어
+// 연속 업데이트(드래그 순서 변경 등)가 한 번의 재렌더로 처리되게 함.
+let jbn_rtBatchTimer = null;
+const jbn_rtBatch = [];
+
 function jbn_applyRt(table, ev) {
+  // 로컬 데이터는 즉시 머지 (emitChange 없이)
   if (ev.eventType === 'INSERT' || ev.eventType === 'UPDATE') {
-    jbn_localUpsert(table, ev.new);
+    _jbn_mergeLocal(table, ev.new);
   } else if (ev.eventType === 'DELETE') {
     if (table === 'task_assignees') {
-      jbn_localDelete(table, { task_id: ev.old.task_id, member_id: ev.old.member_id });
+      _jbn_deleteLocal(table, { task_id: ev.old.task_id, member_id: ev.old.member_id });
     } else {
-      jbn_localDelete(table, { id: ev.old.id });
+      _jbn_deleteLocal(table, { id: ev.old.id });
     }
   }
+  // 렌더는 디바운스 (80ms 내 추가 이벤트 있으면 합산)
+  clearTimeout(jbn_rtBatchTimer);
+  jbn_rtBatchTimer = setTimeout(() => {
+    jbn_saveSnapshot();
+    jbn_emitChange('realtime');
+  }, 80);
+}
+
+// emitChange 없이 순수 데이터만 머지하는 내부 헬퍼
+function _jbn_mergeLocal(table, row) {
+  const arr = jbnState[table];
+  const pk = _jbn_pkOf(table, row);
+  const idx = arr.findIndex(r => _jbn_pkOf(table, r) === pk);
+  if (idx >= 0) arr[idx] = { ...arr[idx], ...row };
+  else arr.push(row);
+}
+
+function _jbn_deleteLocal(table, match) {
+  const arr = jbnState[table];
+  const next = arr.filter(r => !Object.entries(match).every(([k,v]) => r[k] === v));
+  if (next.length !== arr.length) jbnState[table] = next;
+}
+
+function _jbn_pkOf(table, row) {
+  if (table === 'task_assignees') return `${row.task_id}:${row.member_id}`;
+  return row.id;
 }
 
 // ============================================================
