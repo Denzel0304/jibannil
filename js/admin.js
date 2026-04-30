@@ -60,7 +60,7 @@ function jbn_renderLocationsAdmin() {
 
   const wrap = jbn_el('div', {});
   wrap.appendChild(jbn_el('div', { class: 'jbn-section-head' },
-    jbn_el('h2', { class: 'jbn-h2' }, '장소'),
+    jbn_el('h2', { class: 'jbn-h2', style: 'flex:1;text-align:center' }, '장소'),
     jbn_el('button', {
       class: 'jbn-btn jbn-btn-primary',
       onclick: async () => {
@@ -118,7 +118,7 @@ function jbn_renderTasksOfLocation(loc) {
       class: 'jbn-btn',
       onclick: () => { jbn_locationOpen = null; document.dispatchEvent(new CustomEvent('jbn:rerender')); },
     }, '‹ 장소'),
-    jbn_el('h2', { class: 'jbn-h2' }, loc.name),
+    jbn_el('h2', { class: 'jbn-h2', style: 'flex:1;text-align:center' }, loc.name),
     jbn_el('button', {
       class: 'jbn-btn jbn-btn-primary',
       onclick: () => jbn_openTaskEditor(null, loc.id),
