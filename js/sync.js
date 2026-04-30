@@ -113,8 +113,9 @@ function jbn_applyRt(table, ev) {
   }
 
   if (JBN_ALWAYS_REFETCH.has(table)) {
-    // task_assignees: refetch 후 배치 렌더
-    jbn_refetchTable(table).then(() => _scheduleBatch());
+    // task_assignees: ev.old 신뢰 불가(복합PK + RLS) → 서버에서 전체 refetch
+    // 200ms 지연: INSERT 직후 다른 기기에서 이벤트 수신 시 서버 커밋이 확실히 완료된 후 fetch
+    setTimeout(() => jbn_refetchTable(table).then(() => _scheduleBatch()), 200);
     return;
   }
 
@@ -123,11 +124,6 @@ function jbn_applyRt(table, ev) {
       _mergeLocal(table, ev.new);
     } else {
       jbn_refetchTable(table).then(() => _scheduleBatch());
-      return;
-    }
-    // tasks INSERT: assignees가 별도 이벤트로 오므로 함께 refetch해야 담당자가 보임
-    if (table === 'tasks') {
-      jbn_refetchTable('task_assignees').then(() => _scheduleBatch());
       return;
     }
   } else if (ev.eventType === 'UPDATE') {
