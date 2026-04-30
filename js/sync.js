@@ -77,21 +77,13 @@ function jbn_applyRt(table, ev) {
       && 'sort_order' in ev.new
       && !('title' in ev.new) && !('name' in ev.new);
     if (isOnlySortOrder && jbn_dragLockState.reorderCooldown) return;
-
-    // task_assignees: ev.new 가 RLS 환경에서 신뢰 불가 → 서버에서 전체 refetch
-    if (table === 'task_assignees') {
-      jbn_refetchTaskAssignees();
-      return;
-    }
-
     _mergeLocal(table, ev.new);
   } else if (ev.eventType === 'DELETE') {
-    // task_assignees: ev.old 에 복합PK 컬럼이 안 담겨올 수 있음 → refetch
     if (table === 'task_assignees') {
-      jbn_refetchTaskAssignees();
-      return;
+      _deleteLocal(table, { task_id: ev.old.task_id, member_id: ev.old.member_id });
+    } else {
+      _deleteLocal(table, { id: ev.old.id });
     }
-    _deleteLocal(table, { id: ev.old.id });
   }
 
   // 연속 이벤트 묶기
@@ -100,24 +92,6 @@ function jbn_applyRt(table, ev) {
     jbn_saveSnapshot();
     jbn_emitChange('realtime');
   }, 80);
-}
-
-// task_assignees 전체를 서버에서 다시 가져와 로컬 교체 후 재렌더
-let jbn_assigneeRefetchTimer = null;
-function jbn_refetchTaskAssignees() {
-  // 연속 이벤트(한 task에 담당자 N명) 는 묶어서 1회 fetch
-  clearTimeout(jbn_assigneeRefetchTimer);
-  jbn_assigneeRefetchTimer = setTimeout(async () => {
-    try {
-      const { data, error } = await jbnSupa.from('jibannil_task_assignees').select('*');
-      if (error) { console.error('[RT] assignee refetch error', error); return; }
-      jbnState.task_assignees = data || [];
-      jbn_saveSnapshot();
-      jbn_emitChange('realtime:task_assignees');
-    } catch (e) {
-      console.error('[RT] assignee refetch exception', e);
-    }
-  }, 150);
 }
 
 function _pkOf(table, row) {
@@ -208,12 +182,26 @@ export function jbn_addTask(payload) {
     updated_at: new Date().toISOString(),
   };
   jbn_localUpsert('tasks', row);
-  jbn_enqueue({ table: 'jibannil_tasks', op: 'insert', payload: row });
 
+  const assigneeChildren = [];
   for (const mid of (payload.assignee_ids || [])) {
     const a = { task_id: row.id, member_id: mid };
     jbn_localUpsert('task_assignees', a);
-    jbn_enqueue({ table: 'jibannil_task_assignees', op: 'insert', payload: a });
+    assigneeChildren.push({ table: 'jibannil_task_assignees', payload: a, onConflict: 'task_id,member_id' });
+  }
+
+  // task INSERT 후 assignees INSERT 를 하나의 op 로 묶어 순서 보장
+  // (별도 enqueue 시 task FK 없는 상태에서 assignee INSERT → 외래키 오류 발생 방지)
+  if (assigneeChildren.length) {
+    jbn_enqueue({
+      table: 'jibannil_tasks',
+      op: 'insert_with_children',
+      payload: row,
+      parentConflict: 'id',
+      children: assigneeChildren,
+    });
+  } else {
+    jbn_enqueue({ table: 'jibannil_tasks', op: 'insert', payload: row });
   }
   return row;
 }
@@ -230,7 +218,7 @@ export function jbn_updateTask(id, patch, newAssigneeIds) {
     for (const m of toAdd) {
       const row = { task_id: id, member_id: m };
       jbn_localUpsert('task_assignees', row);
-      jbn_enqueue({ table: 'jibannil_task_assignees', op: 'insert', payload: row });
+      jbn_enqueue({ table: 'jibannil_task_assignees', op: 'upsert', payload: row, onConflict: 'task_id,member_id' });
     }
     for (const m of toRm) {
       jbn_localDelete('task_assignees', { task_id: id, member_id: m });

@@ -192,6 +192,14 @@ async function jbn_executeOp(op) {
     for (const [k,v] of Object.entries(match)) q = q.eq(k, v);
     const { error } = await q;
     if (error) throw error;
+  } else if (kind === 'insert_with_children') {
+    // parent row 먼저 insert, 성공 후 children 순서대로 insert (외래키 순서 보장)
+    const { error: pErr } = await jbnSupa.from(table).upsert(payload, { onConflict: op.parentConflict || 'id' });
+    if (pErr) throw pErr;
+    for (const child of (op.children || [])) {
+      const { error: cErr } = await jbnSupa.from(child.table).upsert(child.payload, { onConflict: child.onConflict || 'task_id,member_id' });
+      if (cErr) throw cErr;
+    }
   } else if (kind === 'reorder') {
     // reorder: rows = [{id, sort_order}, ...] 를 순서대로 update
     // 병렬로 보내면 Realtime 이벤트 순서가 뒤섞이므로 직렬 처리
