@@ -51,7 +51,7 @@ export function jbn_recurrenceLabel(task) {
   if (t === 'daily') return '매일';
   if (t === 'weekly') {
     const names = ['일','월','화','수','목','금','토'];
-    return '매주 ' + (d.weekdays || []).slice().sort().map(w => names[w]).join('') + '요일';
+    return '매주 ' + (d.weekdays || []).slice().sort().map(w => names[w]).join(',');
   }
   if (t === 'monthly_nth') {
     const names = ['일','월','화','수','목','금','토'];
