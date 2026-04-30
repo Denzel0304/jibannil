@@ -274,7 +274,7 @@ input, textarea { font-family: inherit; }
   font-weight: 600; font-size: 13px;
   color: var(--jbn-muted);
 }
-.jbn-subtab-btn.on { background: #fff; color: var(--jbn-primary-d); box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+.jbn-subtab-btn.on { background: #A8D9AD; color: #2D6E35; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
 
 .jbn-section-head {
   display: flex; align-items: center; gap: 10px; justify-content: space-between;
