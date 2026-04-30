@@ -209,22 +209,32 @@ export function jbn_addTask(payload) {
 export function jbn_updateTask(id, patch, newAssigneeIds) {
   const updated_at = new Date().toISOString();
   jbn_localUpsert('tasks', { id, ...patch, updated_at });
-  jbn_enqueue({ table: 'jibannil_tasks', op: 'update', payload: { ...patch, updated_at }, match: { id } });
 
   if (Array.isArray(newAssigneeIds)) {
-    const cur = jbnState.task_assignees.filter(a => a.task_id === id).map(a => a.member_id);
-    const toAdd = newAssigneeIds.filter(m => !cur.includes(m));
-    const toRm  = cur.filter(m => !newAssigneeIds.includes(m));
-    for (const m of toAdd) {
-      const row = { task_id: id, member_id: m };
-      jbn_localUpsert('task_assignees', row);
-      jbn_enqueue({ table: 'jibannil_task_assignees', op: 'upsert', payload: row, onConflict: 'task_id,member_id' });
+    // 로컬: 기존 assignees 전부 제거 후 새 목록으로 교체
+    jbnState.task_assignees = jbnState.task_assignees.filter(a => a.task_id !== id);
+    for (const m of newAssigneeIds) {
+      jbn_localUpsert('task_assignees', { task_id: id, member_id: m });
     }
-    for (const m of toRm) {
-      jbn_localDelete('task_assignees', { task_id: id, member_id: m });
-      jbn_enqueue({ table: 'jibannil_task_assignees', op: 'delete', match: { task_id: id, member_id: m } });
-    }
+
+    // 서버: task update + assignees replace 를 하나의 op 로 묶어 순서 보장
+    // replace_assignees op → executeOp 에서 처리:
+    //   1) tasks update
+    //   2) task_assignees 에서 task_id 일치 행 전부 delete
+    //   3) 새 assignees upsert
+    jbn_enqueue({
+      table: 'jibannil_tasks',
+      op: 'update_with_assignees',
+      payload: { ...patch, updated_at },
+      match: { id },
+      taskId: id,
+      assigneeIds: newAssigneeIds,
+    });
+  } else {
+    jbn_enqueue({ table: 'jibannil_tasks', op: 'update', payload: { ...patch, updated_at }, match: { id } });
   }
+  jbn_saveSnapshot();
+  jbn_emitChange('updateTask');
 }
 
 export function jbn_deleteTask(id) {

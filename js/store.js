@@ -192,6 +192,25 @@ async function jbn_executeOp(op) {
     for (const [k,v] of Object.entries(match)) q = q.eq(k, v);
     const { error } = await q;
     if (error) throw error;
+  } else if (kind === 'update_with_assignees') {
+    // 1) task update
+    let q = jbnSupa.from(table).update(op.payload);
+    for (const [k, v] of Object.entries(op.match)) q = q.eq(k, v);
+    const { error: uErr } = await q;
+    if (uErr) throw uErr;
+    // 2) 기존 assignees 전부 삭제 (task_id 기준 — 복합키 문제 우회)
+    const { error: dErr } = await jbnSupa
+      .from('jibannil_task_assignees')
+      .delete()
+      .eq('task_id', op.taskId);
+    if (dErr) throw dErr;
+    // 3) 새 assignees insert
+    for (const memberId of (op.assigneeIds || [])) {
+      const { error: iErr } = await jbnSupa
+        .from('jibannil_task_assignees')
+        .insert({ task_id: op.taskId, member_id: memberId });
+      if (iErr) throw iErr;
+    }
   } else if (kind === 'insert_with_children') {
     // parent row 먼저 insert, 성공 후 children 순서대로 insert (외래키 순서 보장)
     const { error: pErr } = await jbnSupa.from(table).upsert(payload, { onConflict: op.parentConflict || 'id' });
