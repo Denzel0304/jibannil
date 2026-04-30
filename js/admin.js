@@ -122,7 +122,7 @@ function jbn_renderTasksOfLocation(loc) {
     jbn_el('button', {
       class: 'jbn-btn jbn-btn-primary',
       onclick: () => jbn_openTaskEditor(null, loc.id),
-    }, '+ 할일'),
+    }, '+ 할 일'),
   ));
 
   const list = jbn_el('div', { class: 'jbn-list' });
@@ -252,7 +252,7 @@ function jbn_openTaskEditor(taskId, locationId) {
     const t = task.recurrence_type;
     const d = task.recurrence_data || {};
     if (t === 'daily') {
-      recBody.appendChild(jbn_el('div', { class: 'jbn-hint' }, '매일 발생합니다.'));
+      
     } else if (t === 'weekly') {
       const wks = d.weekdays || [];
       const row = jbn_el('div', { class: 'jbn-chips' });
@@ -313,7 +313,7 @@ function jbn_openTaskEditor(taskId, locationId) {
           task.recurrence_data = d;
         },
       });
-      recBody.append(jbn_el('div', { class: 'jbn-hint' }, '시작일부터 N일마다 발생'), inp);
+      recBody.append(inp);
     }
   }
   renderRecBody();
@@ -454,7 +454,7 @@ function jbn_openTaskEditor(taskId, locationId) {
   }, isNew ? '추가' : '저장');
   const cancelBtn = jbn_el('button', { class: 'jbn-btn', onclick: () => jbn_closeAllModals() }, '취소');
 
-  jbn_openModal({ title: isNew ? '새 할일' : '할일 편집', body: root, footer: [cancelBtn, saveBtn] });
+  jbn_openModal({ title: isNew ? '새 할일' : '할 일 편집', body: root, footer: [cancelBtn, saveBtn] });
 }
 
 // ============================================================
