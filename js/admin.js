@@ -141,7 +141,6 @@ function jbn_renderTasksOfLocation(loc) {
       .sort((a, b) => (a.member_order ?? 0) - (b.member_order ?? 0))
       .map(m => m.display_name);
     if (assignees.length) titleWrap.appendChild(jbn_el('div', { class: 'jbn-row-sub' }, '담당: ' + assignees.join(', ')));
-    titleWrap.addEventListener('click', () => jbn_openTaskEditor(t.id, loc.id));
     row.appendChild(titleWrap);
 
     row.appendChild(jbn_el('button', {
