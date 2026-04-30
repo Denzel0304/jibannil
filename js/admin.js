@@ -431,18 +431,16 @@ function jbn_openTaskEditor(taskId, locationId) {
       }
 
       if (isNew) {
-        const newTask = jbn_addTask({
+        // task + assignees + checklist 를 하나의 op 로 묶어 전송 (FK 순서 보장)
+        jbn_addTask({
           location_id: task.location_id,
           title: task.title,
           recurrence_type: task.recurrence_type,
           recurrence_data: task.recurrence_data,
           start_date: task.start_date,
           assignee_ids: assigneeIds,
+          checklist_titles: draftChecklist.slice().sort((a,b) => a.sort_order - b.sort_order).map(c => c.title),
         });
-        // 임시 체크리스트를 실제 DB에 순서대로 등록
-        for (const c of draftChecklist.slice().sort((a,b) => a.sort_order - b.sort_order)) {
-          jbn_addChecklist(newTask.id, c.title);
-        }
       } else {
         jbn_updateTask(taskId, {
           title: task.title,

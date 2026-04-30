@@ -183,22 +183,37 @@ export function jbn_addTask(payload) {
   };
   jbn_localUpsert('tasks', row);
 
-  const assigneeChildren = [];
+  const children = [];
+
+  // assignees
   for (const mid of (payload.assignee_ids || [])) {
     const a = { task_id: row.id, member_id: mid };
     jbn_localUpsert('task_assignees', a);
-    assigneeChildren.push({ table: 'jibannil_task_assignees', payload: a, onConflict: 'task_id,member_id' });
+    children.push({ table: 'jibannil_task_assignees', payload: a, onConflict: 'task_id,member_id' });
   }
 
-  // task INSERT 후 assignees INSERT 를 하나의 op 로 묶어 순서 보장
-  // (별도 enqueue 시 task FK 없는 상태에서 assignee INSERT → 외래키 오류 발생 방지)
-  if (assigneeChildren.length) {
+  // checklist — task FK 보장을 위해 함께 묶음
+  const checklistTitles = (payload.checklist_titles || []);
+  checklistTitles.forEach((title, i) => {
+    const c = {
+      id: jbn_uuid(),
+      task_id: row.id,
+      title,
+      sort_order: i,
+      created_at: new Date().toISOString(),
+    };
+    jbn_localUpsert('checklist', c);
+    children.push({ table: 'jibannil_checklist', payload: c, onConflict: 'id' });
+  });
+
+  // task INSERT 후 assignees + checklist 를 하나의 op 로 묶어 순서 보장
+  if (children.length) {
     jbn_enqueue({
       table: 'jibannil_tasks',
       op: 'insert_with_children',
       payload: row,
       parentConflict: 'id',
-      children: assigneeChildren,
+      children,
     });
   } else {
     jbn_enqueue({ table: 'jibannil_tasks', op: 'insert', payload: row });
