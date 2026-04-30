@@ -174,7 +174,7 @@ function jbn_openTaskEditor(taskId, locationId) {
   const task = isNew
     ? {
         title: '',
-        recurrence_type: 'daily',
+        recurrence_type: null,   // 사용자가 직접 선택해야 함
         recurrence_data: {},
         start_date: jbn_logicalToday(),
         location_id: locationId,
@@ -232,7 +232,7 @@ function jbn_openTaskEditor(taskId, locationId) {
         task.recurrence_data = (v === 'daily') ? {} :
           (v === 'weekly') ? { weekdays: [] } :
           (v === 'monthly_nth') ? { occurrences: [] } :
-          { n: 3 };
+          { n: null };   // every_n_days: 빈칸으로 시작
         Object.values(typeBtns).forEach(x => x.classList.remove('on'));
         b.classList.add('on');
         renderRecBody();
@@ -302,8 +302,16 @@ function jbn_openTaskEditor(taskId, locationId) {
       }, '달력으로 선택');
       recBody.append(pickBtn, summary);
     } else if (t === 'every_n_days') {
-      const inp = jbn_el('input', { class: 'jbn-input', type: 'number', min: '1', value: String(d.n || 3),
-        oninput: (e) => { d.n = Math.max(1, Number(e.target.value) || 1); task.recurrence_data = d; } });
+      const inp = jbn_el('input', {
+        class: 'jbn-input', type: 'number', min: '1',
+        value: d.n != null ? String(d.n) : '',
+        placeholder: '일 수 입력',
+        oninput: (e) => {
+          const v = Number(e.target.value);
+          d.n = e.target.value === '' ? null : Math.max(1, v || 1);
+          task.recurrence_data = d;
+        },
+      });
       recBody.append(jbn_el('div', { class: 'jbn-hint' }, '시작일부터 N일마다 발생'), inp);
     }
   }
@@ -407,11 +415,17 @@ function jbn_openTaskEditor(taskId, locationId) {
       if (!title) { jbn_alert('제목을 입력하세요'); return; }
       task.title = title;
 
+      if (!assigneeIds.length) { jbn_alert('담당자를 한 명 이상 선택하세요'); return; }
+
+      if (!task.recurrence_type) { jbn_alert('반복 주기를 선택하세요'); return; }
       if (task.recurrence_type === 'weekly' && !(task.recurrence_data.weekdays || []).length) {
         jbn_alert('요일을 하나 이상 선택하세요'); return;
       }
       if (task.recurrence_type === 'monthly_nth' && !(task.recurrence_data.occurrences || []).length) {
         jbn_alert('달력에서 패턴을 선택하세요'); return;
+      }
+      if (task.recurrence_type === 'every_n_days' && !task.recurrence_data.n) {
+        jbn_alert('일 수를 입력하세요'); return;
       }
 
       if (isNew) {
