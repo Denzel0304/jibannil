@@ -6,14 +6,64 @@
   <meta name="theme-color" content="#7BC47F">
   <title>지반일</title>
   <link rel="stylesheet" href="./css/style.css">
+  <style>
+    #jbnSplash {
+      position: fixed;
+      inset: 0;
+      background: #F4FAF5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 32px;
+      z-index: 9999;
+      transition: opacity .4s ease;
+    }
+    #jbnSplash.hide {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #jbnSplashLogo {
+      width: 160px;
+      height: 160px;
+      object-fit: contain;
+      animation: jbnPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes jbnPulse {
+      0%   { transform: scale(1);    opacity: 1; }
+      50%  { transform: scale(1.10); opacity: .85; }
+      100% { transform: scale(1);    opacity: 1; }
+    }
+    #jbnSplashTouch {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo",
+                   "Malgun Gothic", "맑은 고딕", "Noto Sans KR", sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      color: #5DA961;
+      opacity: 0;
+      transition: opacity .5s ease;
+      cursor: pointer;
+      user-select: none;
+      letter-spacing: .3px;
+    }
+    #jbnSplashTouch.show {
+      opacity: 1;
+      animation: jbnBlink 1.4s ease-in-out infinite;
+    }
+    @keyframes jbnBlink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+  </style>
 </head>
 <body>
-  <div id="jbnApp">
-    <!-- 부팅 전 잠깐 보이는 placeholder. JS 가 곧 갈아끼움. -->
-    <div id="jbnBoot" style="padding:60px 24px;color:#5C7866;text-align:center">
-      불러오는 중…
-    </div>
+  <!-- 스플래시 (JS 가 준비되면 숨김) -->
+  <div id="jbnSplash">
+    <img id="jbnSplashLogo" src="./logo.png" alt="지반일">
+    <div id="jbnSplashTouch">시작하려면 터치하세요</div>
   </div>
+
+  <div id="jbnApp"></div>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
