@@ -462,38 +462,56 @@ function jbn_adm_taskIsFullyDone(task, memberId, targetDate) {
   return slots.length > 0 && slots.every(s => jbn_adm_completedSlot(task.id, s.checklistId, memberId, targetDate));
 }
 function jbn_adm_buildTodayList(memberId, todayIso) {
+  const seen = new Set();
   const list = [];
   const myTasks = jbnState.tasks.filter(t => jbn_adm_isAssignee(t.id, memberId));
+
   for (const task of myTasks) {
-    if (jbn_isOccurrenceOn(task, todayIso) && !jbn_adm_postponedAwayBy(task.id, memberId, todayIso, todayIso)) {
-      list.push({ task, occurrenceDate: todayIso, kind: 'today' });
-    }
-    const into = jbnState.postponements.filter(p =>
-      p.task_id === task.id && p.member_id === memberId && p.postponed_to === todayIso);
-    for (const p of into) {
+    const tid = task.id;
+
+    // A-1) 오늘로 미뤄온 것
+    const intoToday = jbnState.postponements.filter(p =>
+      p.task_id === tid && p.member_id === memberId && p.postponed_to === todayIso);
+    for (const p of intoToday) {
+      const key = tid + ':' + p.original_date;
+      if (seen.has(key)) continue;
+      seen.add(key);
       if (p.original_date === todayIso) {
-        // 원래 오늘 발생일인 일을 미뤘다 복귀 → today 로 편입
-        if (!list.some(x => x.task.id === task.id && x.occurrenceDate === todayIso)) {
-          list.push({ task, occurrenceDate: todayIso, kind: 'today' });
-        }
+        list.push({ task, occurrenceDate: todayIso, displayDate: todayIso, kind: 'today' });
       } else {
-        // 과거 미이행일을 오늘로 미룬 것 → 미이행 딱지 유지
         list.push({ task, occurrenceDate: p.original_date, displayDate: todayIso, kind: 'overdue_in' });
       }
     }
+
+    // A-2) 미래로 미뤄진 것
+    const intoFuture = jbnState.postponements.filter(p =>
+      p.task_id === tid && p.member_id === memberId && p.postponed_to > todayIso);
+    for (const p of intoFuture) {
+      const key = tid + ':' + p.original_date;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      list.push({ task, occurrenceDate: p.original_date, displayDate: p.postponed_to, kind: 'postponed_future' });
+    }
+
+    // B-1) 오늘이 발생일이고 postpone 레코드 없는 것 → today
+    if (jbn_isOccurrenceOn(task, todayIso)) {
+      const key = tid + ':' + todayIso;
+      if (!seen.has(key)) {
+        seen.add(key);
+        list.push({ task, occurrenceDate: todayIso, displayDate: todayIso, kind: 'today' });
+      }
+    }
+
+    // B-2) 과거 발생일 중 postpone 레코드 없는 것 → overdue
     const pasts = jbn_pastOccurrences(task, todayIso, 60);
     for (const iso of pasts) {
-      if (jbn_adm_postponedAwayBy(task.id, memberId, iso, todayIso)) continue;
-      if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
-      list.push({ task, occurrenceDate: iso, kind: 'overdue' });
-    }
-    // 미래로 미뤄진 항목
-    const futurePostponed = jbnState.postponements.filter(p =>
-      p.task_id === task.id && p.member_id === memberId && p.postponed_to > todayIso
-    );
-    for (const p of futurePostponed) {
-      if (list.some(x => x.task.id === task.id && x.occurrenceDate === p.original_date && x.kind === 'postponed_future')) continue;
-      list.push({ task, occurrenceDate: p.original_date, displayDate: p.postponed_to, kind: 'postponed_future' });
+      const hasPostpone = jbnState.postponements.some(p =>
+        p.task_id === tid && p.member_id === memberId && p.original_date === iso);
+      if (hasPostpone) continue;
+      const key = tid + ':' + iso;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      list.push({ task, occurrenceDate: iso, displayDate: iso, kind: 'overdue' });
     }
   }
   return list;
