@@ -36,11 +36,13 @@ function jbn_isAssignee(taskId, memberId) {
   return jbnState.task_assignees.some(a => a.task_id === taskId && a.member_id === memberId);
 }
 
-function jbn_postponedAwayBy(taskId, memberId, originalDate) {
-  // postponed_to 가 original_date 와 같으면 제자리 복귀 → away 아님
-  return jbnState.postponements.some(p =>
-    p.task_id === taskId && p.member_id === memberId && p.original_date === originalDate
-    && p.postponed_to !== originalDate);
+function jbn_postponedAwayBy(taskId, memberId, originalDate, todayIso) {
+  return jbnState.postponements.some(p => {
+    if (p.task_id !== taskId || p.member_id !== memberId || p.original_date !== originalDate) return false;
+    // 오늘 일을 미뤘다가 오늘로 복귀한 경우(original_date === todayIso === postponed_to) → away 아님
+    if (originalDate === todayIso && p.postponed_to === todayIso) return false;
+    return true;
+  });
 }
 
 function jbn_postponedToHere(taskId, memberId, todayIso) {
@@ -93,7 +95,7 @@ export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 60) {
   for (const task of myTasks) {
     // 1) 오늘이 원래 발생일이면서, 내가 오늘 자를 미루지 않았으면 today
     if (jbn_isOccurrenceOn(task, todayIso)) {
-      const isPostponedAway = jbn_postponedAwayBy(task.id, memberId, todayIso);
+      const isPostponedAway = jbn_postponedAwayBy(task.id, memberId, todayIso, todayIso);
       if (!isPostponedAway) {
         list.push({ task, occurrenceDate: todayIso, displayDate: todayIso, kind: 'today' });
       }
@@ -117,7 +119,7 @@ export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 60) {
     // 3) 과거 발생일 중 미완료 + 미연기 → overdue
     const pasts = jbn_pastOccurrences(task, todayIso, lookbackDays);
     for (const iso of pasts) {
-      if (jbn_postponedAwayBy(task.id, memberId, iso)) continue;
+      if (jbn_postponedAwayBy(task.id, memberId, iso, todayIso)) continue;
       // 이미 다른 항목으로 들어가있는지(같은 task + 같은 occurrenceDate) 체크
       if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
       list.push({ task, occurrenceDate: iso, displayDate: iso, kind: 'overdue' });
@@ -208,7 +210,7 @@ export function jbn_periodStats(memberId, fromIso, toIso) {
       let s = 0, d = 0;
       for (const task of myTasks) {
         // 그 날 원래 발생 + 그 날을 미루지 않음 → 그 날 슬롯
-        const occToday = jbn_isOccurrenceOn(task, cursor) && !jbn_postponedAwayBy(task.id, memberId, cursor);
+        const occToday = jbn_isOccurrenceOn(task, cursor) && !jbn_postponedAwayBy(task.id, memberId, cursor, cursor);
         // 다른 날에서 그 날로 미뤘다면도 포함
         const inHere = jbnState.postponements.some(p =>
           p.task_id === task.id && p.member_id === memberId && p.postponed_to === cursor);

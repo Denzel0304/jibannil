@@ -437,9 +437,12 @@ function jbn_openTaskEditor(taskId, locationId) {
 function jbn_adm_isAssignee(taskId, memberId) {
   return jbnState.task_assignees.some(a => a.task_id === taskId && a.member_id === memberId);
 }
-function jbn_adm_postponedAwayBy(taskId, memberId, originalDate) {
-  return jbnState.postponements.some(p =>
-    p.task_id === taskId && p.member_id === memberId && p.original_date === originalDate);
+function jbn_adm_postponedAwayBy(taskId, memberId, originalDate, todayIso) {
+  return jbnState.postponements.some(p => {
+    if (p.task_id !== taskId || p.member_id !== memberId || p.original_date !== originalDate) return false;
+    if (originalDate === todayIso && p.postponed_to === todayIso) return false;
+    return true;
+  });
 }
 function jbn_adm_completedSlot(taskId, checklistId, memberId, targetDate) {
   return jbnState.completions.find(c =>
@@ -462,7 +465,7 @@ function jbn_adm_buildTodayList(memberId, todayIso) {
   const list = [];
   const myTasks = jbnState.tasks.filter(t => jbn_adm_isAssignee(t.id, memberId));
   for (const task of myTasks) {
-    if (jbn_isOccurrenceOn(task, todayIso) && !jbn_adm_postponedAwayBy(task.id, memberId, todayIso)) {
+    if (jbn_isOccurrenceOn(task, todayIso) && !jbn_adm_postponedAwayBy(task.id, memberId, todayIso, todayIso)) {
       list.push({ task, occurrenceDate: todayIso, kind: 'today' });
     }
     const into = jbnState.postponements.filter(p =>
@@ -472,7 +475,7 @@ function jbn_adm_buildTodayList(memberId, todayIso) {
     }
     const pasts = jbn_pastOccurrences(task, todayIso, 60);
     for (const iso of pasts) {
-      if (jbn_adm_postponedAwayBy(task.id, memberId, iso)) continue;
+      if (jbn_adm_postponedAwayBy(task.id, memberId, iso, todayIso)) continue;
       if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
       list.push({ task, occurrenceDate: iso, kind: 'overdue' });
     }
