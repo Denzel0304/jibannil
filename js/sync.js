@@ -18,7 +18,7 @@ import {
   jbn_enqueue, jbn_emitChange,
   jbn_saveSnapshot,
 } from './store.js';
-import { jbn_uuid } from './util.js';
+import { jbn_uuid, jbn_logicalToday, jbn_addDays } from './util.js';
 import { jbn_dragLockState } from './interactions.js';
 
 // ============================================================
@@ -307,6 +307,20 @@ export function jbn_reorderChecklist(taskId, orderedIds) {
 // ============================================================
 // Completions (완료 체크)
 // ============================================================
+
+// 완료 insert 후 31일 이전 오래된 기록 정리 (멤버당 30일치만 유지)
+function jbn_pruneCompletions(memberId) {
+  const todayIso = jbn_logicalToday();
+  const cutoff = jbn_addDays(todayIso, -30); // cutoff 미만은 삭제
+  const toDelete = jbnState.completions.filter(c =>
+    c.member_id === memberId && c.target_date < cutoff
+  );
+  for (const c of toDelete) {
+    jbn_localDelete('completions', { id: c.id });
+    jbn_enqueue({ table: 'jibannil_completions', op: 'delete', match: { id: c.id } });
+  }
+}
+
 export function jbn_markComplete(taskId, checklistId, targetDate) {
   const me = jbn_me();
   if (!me) return;
@@ -327,6 +341,7 @@ export function jbn_markComplete(taskId, checklistId, targetDate) {
   };
   jbn_localUpsert('completions', row);
   jbn_enqueue({ table: 'jibannil_completions', op: 'insert', payload: row });
+  jbn_pruneCompletions(me.id);
   return row;
 }
 
@@ -363,6 +378,7 @@ export function jbn_markCompleteAs(memberId, taskId, checklistId, targetDate) {
   };
   jbn_localUpsert('completions', row);
   jbn_enqueue({ table: 'jibannil_completions', op: 'insert', payload: row });
+  jbn_pruneCompletions(memberId);
   return row;
 }
 
