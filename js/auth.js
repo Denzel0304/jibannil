@@ -33,6 +33,7 @@ export const jbnSupa = createClient(
 
 let jbn_currentSession = null;
 let jbn_currentMember  = null;
+let jbn_authInitDone   = false;  // initAuth 완료 전 이벤트 무시용
 const jbn_authListeners = new Set();
 
 export function jbn_onAuthChange(fn) {
@@ -63,8 +64,9 @@ export async function jbn_initAuth() {
       jbn_emitAuth();
       return;
     }
-    // 토큰 갱신 시 채널이 끊기기 전에 선제 재연결
-    if (evt === 'TOKEN_REFRESHED' && sess) {
+    // 토큰 갱신 시 채널이 끊기기 전에 선제 재연결.
+    // jbn_authInitDone 이전(부팅 중) 이벤트는 무시 — 이중 구독 방지.
+    if (evt === 'TOKEN_REFRESHED' && sess && jbn_authInitDone) {
       jbn_currentSession = sess;
       jbn_scheduleRefreshWatchdog();
       import('./sync.js').then(m => m.jbn_startRealtime()).catch(() => {});
@@ -86,6 +88,7 @@ export async function jbn_initAuth() {
     await jbn_loadMyMember();
     jbn_scheduleRefreshWatchdog();
   }
+  jbn_authInitDone = true;  // 이후 TOKEN_REFRESHED 이벤트부터 재연결 허용
   jbn_emitAuth();
   return session;
 }
