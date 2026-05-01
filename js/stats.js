@@ -151,9 +151,34 @@ export function jbn_personDailyProgress(memberId, todayIso) {
 
 // 어제까지 누적 미완료 (빨간 표시 통계)
 export function jbn_overdueByMember(todayIso, lookbackDays = 60) {
+  // 미완료 누적 = 과거 발생일 중 완료 기록이 없는 슬롯.
+  // 미뤘는지(postpone) 여부와 무관하게, 실제로 완료되지 않은 것만 카운트.
   const map = {};
   for (const m of jbnState.members) {
-    const items = jbn_buildTodayList(m.id, todayIso, lookbackDays).filter(x => x.kind === 'overdue');
+    const items = [];
+    const myTasks = jbnState.tasks.filter(t =>
+      jbnState.task_assignees.some(a => a.task_id === t.id && a.member_id === m.id)
+    );
+    for (const task of myTasks) {
+      const pasts = jbn_pastOccurrences(task, todayIso, lookbackDays);
+      for (const iso of pasts) {
+        // 해당 발생일에 완료 기록이 하나라도 없으면 미완료
+        const slots = jbn_taskSlots(task.id);
+        const allDone = slots.every(s =>
+          jbnState.completions.some(c =>
+            c.task_id === task.id &&
+            (c.checklist_id || null) === (s.checklistId || null) &&
+            c.member_id === m.id &&
+            c.target_date === iso
+          )
+        );
+        if (!allDone) {
+          items.push({ task, occurrenceDate: iso });
+        }
+      }
+    }
+    // 오래된 순 정렬
+    items.sort((a, b) => a.occurrenceDate.localeCompare(b.occurrenceDate));
     map[m.id] = items;
   }
   return map;
