@@ -284,8 +284,7 @@ function jbn_renderTaskRow(me, item, todayIso) {
     sub.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, '미룬 일'));
   }
   if (kind === 'postponed_future') {
-    // displayDate = postponed_to (미래 날짜)
-    sub.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미룬 날짜: ${displayDate}`));
+    sub.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
   }
   body.append(titleLine, sub);
 
@@ -370,7 +369,7 @@ function jbn_openPostponeMenu(task, occurrenceDate, todayIso) {
     const picked = await jbn_pickDate({
       mode: 'single',
       initial: jbn_addDays(todayIso, 1),
-      minDate: jbn_addDays(todayIso, 1),
+      minDate: todayIso,
       title: '미룰 날짜 선택',
     });
     if (picked) {

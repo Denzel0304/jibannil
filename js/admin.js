@@ -642,6 +642,7 @@ function jbn_buildAdminTaskRow(member, item, todayIso) {
   } else if (isPostponed) {
     titleRow.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미뤄옴: ${occurrenceDate}`));
   } else if (isFuture) {
+    titleRow.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
     titleRow.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미룬 날짜: ${displayDate}`));
   }
   body.appendChild(titleRow);
