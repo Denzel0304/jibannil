@@ -384,21 +384,42 @@ function jbn_renderStats(me) {
   const map = jbn_overdueByMember(todayIso);
   for (const m of memSorted) {
     const items = map[m.id] || [];
+    const doneCnt = items.filter(it => {
+      const slots = jbnState.checklist.filter(c => c.task_id === it.task.id);
+      if (slots.length) return slots.every(c => jbnState.completions.some(co =>
+        co.task_id === it.task.id && co.checklist_id === c.id &&
+        co.member_id === m.id && co.target_date === it.occurrenceDate));
+      return jbnState.completions.some(co =>
+        co.task_id === it.task.id && !co.checklist_id &&
+        co.member_id === m.id && co.target_date === it.occurrenceDate);
+    }).length;
     const sec = jbn_el('div', { class: 'jbn-overdue-sec' });
     sec.appendChild(jbn_el('div', { class: 'jbn-overdue-name' },
-      `${m.display_name} — ${items.length}건`));
+      `${m.display_name} — ${items.length}건` + (doneCnt ? ` (${doneCnt}건 완료됨)` : '')));
     if (items.length === 0) {
       sec.appendChild(jbn_el('div', { class: 'jbn-overdue-empty' }, '깔끔! 👍'));
     } else {
       for (const it of items) {
         const loc = jbnState.locations.find(l => l.id === it.task.location_id);
         const days = jbn_diffDays(todayIso, it.occurrenceDate);
-        sec.appendChild(jbn_el('div', { class: 'jbn-overdue-item' },
-          jbn_el('span', { class: 'jbn-chip warn' }, `${days}일`),
-          jbn_el('span', { class: 'jbn-overdue-title' },
-            `${loc ? loc.name + ' · ' : ''}${it.task.title}`),
-          jbn_el('span', { class: 'jbn-overdue-date' }, it.occurrenceDate),
-        ));
+        // 완료 여부 체크
+        const slots = jbnState.checklist.filter(c => c.task_id === it.task.id);
+        const isDone = slots.length
+          ? slots.every(c => jbnState.completions.some(co =>
+              co.task_id === it.task.id && co.checklist_id === c.id &&
+              co.member_id === m.id && co.target_date === it.occurrenceDate))
+          : jbnState.completions.some(co =>
+              co.task_id === it.task.id && !co.checklist_id &&
+              co.member_id === m.id && co.target_date === it.occurrenceDate);
+        const item = jbn_el('div', { class: 'jbn-overdue-item' });
+        item.appendChild(jbn_el('span', { class: isDone ? 'jbn-chip' : 'jbn-chip warn' },
+          isDone ? '★ 완료' : `${days}일`));
+        const titleEl = jbn_el('span', { class: 'jbn-overdue-title' },
+          `${loc ? loc.name + ' · ' : ''}${it.task.title}`);
+        if (isDone) titleEl.style.cssText = 'text-decoration:line-through; color:var(--jbn-muted)';
+        item.appendChild(titleEl);
+        item.appendChild(jbn_el('span', { class: 'jbn-overdue-date' }, it.occurrenceDate));
+        sec.appendChild(item);
       }
     }
     overdueCard.appendChild(sec);
