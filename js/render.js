@@ -348,13 +348,7 @@ function jbn_renderTaskRow(me, item, todayIso) {
 
 function jbn_openPostponeMenu(task, occurrenceDate, todayIso) {
   const wrap = jbn_el('div', { class: 'jbn-menu' });
-  const opt1 = jbn_el('button', { class: 'jbn-menu-item', onclick: () => {
-    const target = jbn_addDays(todayIso, 1);
-    jbn_postponeTask(task.id, occurrenceDate, target);
-    jbn_closeModal();
-    jbn_toast('내일로 미뤘어요');
-  } }, '1일 뒤로');
-  const opt2 = jbn_el('button', { class: 'jbn-menu-item', onclick: async () => {
+  const opt = jbn_el('button', { class: 'jbn-menu-item', onclick: async () => {
     jbn_closeModal();
     const picked = await jbn_pickDate({
       mode: 'single',
@@ -367,7 +361,7 @@ function jbn_openPostponeMenu(task, occurrenceDate, todayIso) {
       jbn_toast(`${picked} 로 미뤘어요`);
     }
   } }, '날짜 선택');
-  wrap.append(opt1, opt2);
+  wrap.append(opt);
   jbn_openModal({ title: `"${task.title}" 미루기`, body: wrap });
 }
 
