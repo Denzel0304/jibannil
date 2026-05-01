@@ -13,6 +13,7 @@ import {
   jbn_addTask, jbn_updateTask, jbn_deleteTask, jbn_reorderTasks,
   jbn_addChecklist, jbn_updateChecklist, jbn_deleteChecklist, jbn_reorderChecklist,
   jbn_setSuper, jbn_renameMember, jbn_setMemberColor,
+  jbn_markCompleteAs, jbn_unmarkCompleteAs,
 } from './sync.js';
 import {
   jbn_$, jbn_el, jbn_clear, jbn_logicalToday, jbn_isoDate, JBN_WEEKDAY_KO,
@@ -22,8 +23,9 @@ import {
 } from './modal.js';
 import { jbn_attachDragSort } from './interactions.js';
 import { jbn_recurrenceLabel } from './recurrence.js';
+import { jbn_buildTodayList, jbn_taskIsFullyDone } from './stats.js';
 
-let jbn_adminTab = 'locations'; // 'locations' | 'members'
+let jbn_adminTab = 'locations'; // 'locations' | 'alltasks' | 'members'
 let jbn_locationOpen = null;    // location_id
 
 export function jbn_renderAdmin(me) {
@@ -31,7 +33,7 @@ export function jbn_renderAdmin(me) {
 
   // 서브탭
   const sub = jbn_el('div', { class: 'jbn-subtab' });
-  for (const [id, label] of [['locations','장소·할일'], ['members','구성원']]) {
+  for (const [id, label] of [['locations','장소·할일'], ['alltasks','모든 일'], ['members','구성원']]) {
     sub.appendChild(jbn_el('button', {
       class: 'jbn-subtab-btn' + (jbn_adminTab === id ? ' on' : ''),
       onclick: () => {
@@ -44,6 +46,7 @@ export function jbn_renderAdmin(me) {
   wrap.appendChild(sub);
 
   if (jbn_adminTab === 'locations') wrap.appendChild(jbn_renderLocationsAdmin());
+  else if (jbn_adminTab === 'alltasks') wrap.appendChild(jbn_renderAllTasksAdmin());
   else if (jbn_adminTab === 'members') wrap.appendChild(jbn_renderMembersAdmin(me));
   return wrap;
 }
@@ -424,7 +427,184 @@ function jbn_openTaskEditor(taskId, locationId) {
 }
 
 // ============================================================
-// 구성원 관리
+// 모든 일 (super 전용 — 전 구성원 오늘 목록 통합 뷰)
+// 정렬: member_order 내림차순(3→2→1→0), 각 멤버 안에서 overdue 먼저(오래된 순) → today(오래된 순)
+// ============================================================
+function jbn_renderAllTasksAdmin() {
+  const todayIso = jbn_logicalToday();
+  const wrap = jbn_el('div', {});
+
+  // member_order 내림차순(3,2,1,0)
+  const members = [...jbnState.members].sort((a, b) => (b.member_order ?? 0) - (a.member_order ?? 0));
+
+  if (!members.length) {
+    wrap.appendChild(jbn_el('div', { class: 'jbn-empty' }, '구성원이 없습니다.'));
+    return wrap;
+  }
+
+  for (const member of members) {
+    const items = jbn_buildTodayList(member.id, todayIso, 60);
+    // 정렬: overdue 먼저(오래된 순) → today/postponed_in(오래된 순)
+    // jbn_buildTodayList 이미 overdue 먼저 정렬하지만 today 는 sort_order 기준 → occurrenceDate 기준으로 재정렬
+    items.sort((a, b) => {
+      const aOver = a.kind === 'overdue';
+      const bOver = b.kind === 'overdue';
+      if (aOver && !bOver) return -1;
+      if (!aOver && bOver) return 1;
+      return a.occurrenceDate.localeCompare(b.occurrenceDate);
+    });
+
+    const overdueItems = items.filter(x => x.kind === 'overdue');
+    const todayItems   = items.filter(x => x.kind !== 'overdue');
+
+    // 멤버 헤더
+    const totalSlots = items.reduce((s, it) => {
+      const cls = jbnState.checklist.filter(c => c.task_id === it.task.id);
+      return s + (cls.length || 1);
+    }, 0);
+    const doneSlots = items.reduce((s, it) => {
+      const cls = jbnState.checklist.filter(c => c.task_id === it.task.id);
+      const slots = cls.length ? cls : [{ id: null }];
+      return s + slots.filter(c => jbnState.completions.some(cp =>
+        cp.task_id === it.task.id &&
+        (cp.checklist_id || null) === (c.id || null) &&
+        cp.member_id === member.id &&
+        cp.target_date === it.occurrenceDate
+      )).length;
+    }, 0);
+    const pct = totalSlots ? Math.round(doneSlots / totalSlots * 100) : 0;
+
+    const accent = member.accent_color || '#7BC47F';
+    const header = jbn_el('div', {
+      style: `
+        display:flex; align-items:center; gap:10px;
+        margin: 18px 0 6px;
+        padding: 10px 14px;
+        background: var(--jbn-card);
+        border-radius: var(--jbn-radius);
+        border-left: 4px solid ${accent};
+        box-shadow: var(--jbn-shadow);
+      `,
+    });
+    header.appendChild(jbn_el('span', {
+      style: `font-weight:700; font-size:15px; flex:1; color:${accent}`,
+    }, member.display_name));
+    header.appendChild(jbn_el('span', {
+      style: 'font-size:13px; color:var(--jbn-muted)',
+    }, `${doneSlots}/${totalSlots} (${pct}%)`));
+    wrap.appendChild(header);
+
+    if (!items.length) {
+      wrap.appendChild(jbn_el('div', { class: 'jbn-empty', style: 'padding:12px 0' }, '할 일 없음'));
+      continue;
+    }
+
+    // 밀린 일 소섹션
+    if (overdueItems.length) {
+      wrap.appendChild(jbn_el('div', {
+        style: 'font-size:12px; font-weight:700; color:var(--jbn-warn); margin:8px 0 4px 4px; letter-spacing:.3px',
+      }, `⚠ 밀린 일 (${overdueItems.length})`));
+      for (const it of overdueItems) {
+        wrap.appendChild(jbn_buildAdminTaskRow(member, it, todayIso));
+      }
+    }
+
+    // 오늘 일 소섹션
+    if (todayItems.length) {
+      const label = todayItems.some(x => x.kind === 'postponed_in') ? '오늘 일 / 미뤄온 일' : '오늘 일';
+      wrap.appendChild(jbn_el('div', {
+        style: 'font-size:12px; font-weight:700; color:var(--jbn-primary-d); margin:8px 0 4px 4px; letter-spacing:.3px',
+      }, `✓ ${label} (${todayItems.length})`));
+      for (const it of todayItems) {
+        wrap.appendChild(jbn_buildAdminTaskRow(member, it, todayIso));
+      }
+    }
+  }
+
+  return wrap;
+}
+
+// 개별 할일 카드 (관리자용 — 완료/미완료 토글 포함)
+function jbn_buildAdminTaskRow(member, item, todayIso) {
+  const { task, occurrenceDate, kind } = item;
+  const checklists = jbnState.checklist
+    .filter(c => c.task_id === task.id)
+    .sort((a, b) => a.sort_order - b.sort_order);
+  const hasChecklist = checklists.length > 0;
+
+  const isOverdue  = kind === 'overdue';
+  const isPostponed = kind === 'postponed_in';
+  const isFullyDone = jbn_taskIsFullyDone(task, member.id, occurrenceDate);
+
+  const card = jbn_el('div', {
+    class: 'jbn-task' + (isFullyDone ? ' done' : '') + (isOverdue ? ' overdue' : '') + (isPostponed ? ' postin' : ''),
+    style: 'margin-bottom:8px',
+  });
+
+  // 별 아이콘 (완료 표시, 체크리스트 없는 경우 클릭 토글)
+  const star = jbn_el('div', { class: 'jbn-star' }, isFullyDone ? '★' : '☆');
+  if (!hasChecklist) {
+    star.style.cursor = 'pointer';
+    star.addEventListener('click', () => {
+      if (isFullyDone) {
+        jbn_unmarkCompleteAs(member.id, task.id, null, occurrenceDate);
+      } else {
+        jbn_markCompleteAs(member.id, task.id, null, occurrenceDate);
+      }
+      document.dispatchEvent(new CustomEvent('jbn:rerender'));
+    });
+  }
+  card.appendChild(star);
+
+  const body = jbn_el('div', { class: 'jbn-task-body' });
+
+  // 제목 + chip들
+  const titleRow = jbn_el('div', { style: 'display:flex; align-items:center; gap:6px; flex-wrap:wrap' });
+  titleRow.appendChild(jbn_el('span', { class: 'jbn-task-title' }, task.title));
+  if (isOverdue) {
+    titleRow.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `밀린: ${occurrenceDate}`));
+  } else if (isPostponed) {
+    titleRow.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미뤄옴: ${occurrenceDate}`));
+  }
+  body.appendChild(titleRow);
+
+  // 장소
+  const loc = jbnState.locations.find(l => l.id === task.location_id);
+  if (loc) {
+    body.appendChild(jbn_el('div', { class: 'jbn-time' }, `📍 ${loc.name}`));
+  }
+
+  // 체크리스트
+  if (hasChecklist) {
+    const clWrap = jbn_el('div', { class: 'jbn-checks' });
+    for (const cl of checklists) {
+      const isDone = jbnState.completions.some(c =>
+        c.task_id === task.id &&
+        c.checklist_id === cl.id &&
+        c.member_id === member.id &&
+        c.target_date === occurrenceDate
+      );
+      const row = jbn_el('div', { class: 'jbn-check' + (isDone ? ' on' : ''), style: 'cursor:pointer' });
+      row.appendChild(jbn_el('span', { class: 'jbn-check-mark' }, isDone ? '★' : '☆'));
+      row.appendChild(jbn_el('span', { class: 'jbn-check-title' }, cl.title));
+      row.addEventListener('click', () => {
+        if (isDone) {
+          jbn_unmarkCompleteAs(member.id, task.id, cl.id, occurrenceDate);
+        } else {
+          jbn_markCompleteAs(member.id, task.id, cl.id, occurrenceDate);
+        }
+        document.dispatchEvent(new CustomEvent('jbn:rerender'));
+      });
+      clWrap.appendChild(row);
+    }
+    body.appendChild(clWrap);
+  }
+
+  card.appendChild(body);
+  return card;
+}
+
+// ============================================================
 // ============================================================
 function jbn_renderMembersAdmin(me) {
   const wrap = jbn_el('div', {});

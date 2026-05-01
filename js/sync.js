@@ -344,6 +344,41 @@ export function jbn_unmarkComplete(taskId, checklistId, targetDate) {
   jbn_enqueue({ table: 'jibannil_completions', op: 'delete', match: { id: existing.id } });
 }
 
+// 관리자용 — 특정 멤버 대신 완료 처리
+export function jbn_markCompleteAs(memberId, taskId, checklistId, targetDate) {
+  const existing = jbnState.completions.find(c =>
+    c.task_id === taskId &&
+    (c.checklist_id || null) === (checklistId || null) &&
+    c.member_id === memberId &&
+    c.target_date === targetDate
+  );
+  if (existing) return existing;
+  const row = {
+    id: jbn_uuid(),
+    task_id: taskId,
+    checklist_id: checklistId || null,
+    member_id: memberId,
+    target_date: targetDate,
+    completed_at: new Date().toISOString(),
+  };
+  jbn_localUpsert('completions', row);
+  jbn_enqueue({ table: 'jibannil_completions', op: 'insert', payload: row });
+  return row;
+}
+
+// 관리자용 — 특정 멤버 완료 취소
+export function jbn_unmarkCompleteAs(memberId, taskId, checklistId, targetDate) {
+  const existing = jbnState.completions.find(c =>
+    c.task_id === taskId &&
+    (c.checklist_id || null) === (checklistId || null) &&
+    c.member_id === memberId &&
+    c.target_date === targetDate
+  );
+  if (!existing) return;
+  jbn_localDelete('completions', { id: existing.id });
+  jbn_enqueue({ table: 'jibannil_completions', op: 'delete', match: { id: existing.id } });
+}
+
 // ============================================================
 // Postponements (개인별 미루기)
 // ============================================================
