@@ -28,6 +28,9 @@ let jbn_rtChannel    = null;
 let jbn_rtBatchTimer = null;
 
 export function jbn_startRealtime() {
+  // 이미 정상 구독 중이면 재연결 불필요 — 이중 호출 방지
+  if (jbn_rtChannel?.state === 'joined') return;
+
   // 기존 채널 제거
   if (jbn_rtChannel) {
     try { jbnSupa.removeChannel(jbn_rtChannel); } catch (e) { console.warn('[RT] removeChannel', e); }
