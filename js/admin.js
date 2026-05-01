@@ -23,7 +23,7 @@ import {
 } from './modal.js';
 import { jbn_attachDragSort } from './interactions.js';
 import { jbn_recurrenceLabel } from './recurrence.js';
-import { jbn_buildTodayList, jbn_taskIsFullyDone } from './stats.js';
+import { jbn_isOccurrenceOn, jbn_pastOccurrences } from './recurrence.js';
 
 let jbn_adminTab = 'locations'; // 'locations' | 'alltasks' | 'members'
 let jbn_locationOpen = null;    // location_id
@@ -427,6 +427,56 @@ function jbn_openTaskEditor(taskId, locationId) {
 }
 
 // ============================================================
+// 모든 일 — 인라인 헬퍼 (stats.js import 순환 방지용)
+// ============================================================
+function jbn_adm_isAssignee(taskId, memberId) {
+  return jbnState.task_assignees.some(a => a.task_id === taskId && a.member_id === memberId);
+}
+function jbn_adm_postponedAwayBy(taskId, memberId, originalDate) {
+  return jbnState.postponements.some(p =>
+    p.task_id === taskId && p.member_id === memberId && p.original_date === originalDate);
+}
+function jbn_adm_completedSlot(taskId, checklistId, memberId, targetDate) {
+  return jbnState.completions.find(c =>
+    c.task_id === taskId &&
+    (c.checklist_id || null) === (checklistId || null) &&
+    c.member_id === memberId &&
+    c.target_date === targetDate
+  );
+}
+function jbn_adm_taskSlots(taskId) {
+  const cls = jbnState.checklist.filter(c => c.task_id === taskId);
+  if (cls.length) return cls.map(c => ({ checklistId: c.id, title: c.title, sort: c.sort_order }));
+  return [{ checklistId: null, title: null, sort: 0 }];
+}
+function jbn_adm_taskIsFullyDone(task, memberId, targetDate) {
+  const slots = jbn_adm_taskSlots(task.id);
+  return slots.length > 0 && slots.every(s => jbn_adm_completedSlot(task.id, s.checklistId, memberId, targetDate));
+}
+function jbn_adm_buildTodayList(memberId, todayIso) {
+  const list = [];
+  const myTasks = jbnState.tasks.filter(t => jbn_adm_isAssignee(t.id, memberId));
+  for (const task of myTasks) {
+    if (jbn_isOccurrenceOn(task, todayIso) && !jbn_adm_postponedAwayBy(task.id, memberId, todayIso)) {
+      list.push({ task, occurrenceDate: todayIso, kind: 'today' });
+    }
+    const into = jbnState.postponements.filter(p =>
+      p.task_id === task.id && p.member_id === memberId && p.postponed_to === todayIso);
+    for (const p of into) {
+      list.push({ task, occurrenceDate: p.original_date, kind: 'postponed_in' });
+    }
+    const pasts = jbn_pastOccurrences(task, todayIso, 60);
+    for (const iso of pasts) {
+      if (jbn_adm_postponedAwayBy(task.id, memberId, iso)) continue;
+      if (jbn_adm_taskIsFullyDone(task, memberId, iso)) continue;
+      if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
+      list.push({ task, occurrenceDate: iso, kind: 'overdue' });
+    }
+  }
+  return list;
+}
+
+// ============================================================
 // 모든 일 (super 전용 — 전 구성원 오늘 목록 통합 뷰)
 // 정렬: member_order 내림차순(3→2→1→0), 각 멤버 안에서 overdue 먼저(오래된 순) → today(오래된 순)
 // ============================================================
@@ -443,7 +493,7 @@ function jbn_renderAllTasksAdmin() {
   }
 
   for (const member of members) {
-    const items = jbn_buildTodayList(member.id, todayIso, 60);
+    const items = jbn_adm_buildTodayList(member.id, todayIso);
     // 정렬: overdue 먼저(오래된 순) → today/postponed_in(오래된 순)
     // jbn_buildTodayList 이미 overdue 먼저 정렬하지만 today 는 sort_order 기준 → occurrenceDate 기준으로 재정렬
     items.sort((a, b) => {
@@ -534,7 +584,7 @@ function jbn_buildAdminTaskRow(member, item, todayIso) {
 
   const isOverdue  = kind === 'overdue';
   const isPostponed = kind === 'postponed_in';
-  const isFullyDone = jbn_taskIsFullyDone(task, member.id, occurrenceDate);
+  const isFullyDone = jbn_adm_taskIsFullyDone(task, member.id, occurrenceDate);
 
   const card = jbn_el('div', {
     class: 'jbn-task' + (isFullyDone ? ' done' : '') + (isOverdue ? ' overdue' : '') + (isPostponed ? ' postin' : ''),
