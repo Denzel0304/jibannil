@@ -26,10 +26,12 @@ import { jbn_dragLockState } from './interactions.js';
 // ============================================================
 let jbn_rtChannel    = null;
 let jbn_rtBatchTimer = null;
+let jbn_rtStarted    = false;  // 이중 구독 방지 플래그
 
 export function jbn_startRealtime() {
-  // 이미 정상 구독 중이면 재연결 불필요 — 이중 호출 방지
-  if (jbn_rtChannel?.state === 'joined') return;
+  // 이미 시작 요청했으면 건너뜀 (joined 타이밍 문제 없이 플래그로 관리)
+  if (jbn_rtStarted) return;
+  jbn_rtStarted = true;
 
   // 기존 채널 제거
   if (jbn_rtChannel) {
@@ -52,6 +54,7 @@ export function jbn_startRealtime() {
         console.log('[RT] subscribed OK');
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         console.warn('[RT] ' + status + ' — retry in 3s', err);
+        jbn_rtStarted = false;  // 재연결 허용
         setTimeout(jbn_startRealtime, 3000);
       } else if (status === 'CLOSED') {
         console.warn('[RT] channel closed');
@@ -62,6 +65,7 @@ export function jbn_startRealtime() {
 // 온라인 복귀 시 realtime 재연결
 window.addEventListener('online', () => {
   console.log('[RT] online → restart');
+  jbn_rtStarted = false;  // 재연결 허용
   setTimeout(jbn_startRealtime, 800);
 });
 
