@@ -471,7 +471,7 @@ function jbn_adm_buildTodayList(memberId, todayIso) {
     const into = jbnState.postponements.filter(p =>
       p.task_id === task.id && p.member_id === memberId && p.postponed_to === todayIso);
     for (const p of into) {
-      if (p.original_date === todayIso && jbn_isOccurrenceOn(task, todayIso)) {
+      if (p.original_date === todayIso) {
         // 원래 오늘 발생일인 일을 미뤘다 복귀 → today 로 편입
         if (!list.some(x => x.task.id === task.id && x.occurrenceDate === todayIso)) {
           list.push({ task, occurrenceDate: todayIso, kind: 'today' });
