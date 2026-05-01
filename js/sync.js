@@ -308,6 +308,19 @@ export function jbn_reorderChecklist(taskId, orderedIds) {
 // Completions (완료 체크)
 // ============================================================
 
+// 미루기 기록 30일치만 유지 (original_date 기준)
+function jbn_prunePostponements(memberId) {
+  const todayIso = jbn_logicalToday();
+  const cutoff = jbn_addDays(todayIso, -30);
+  const toDelete = jbnState.postponements.filter(p =>
+    p.member_id === memberId && p.original_date < cutoff
+  );
+  for (const p of toDelete) {
+    jbn_localDelete('postponements', { id: p.id });
+    jbn_enqueue({ table: 'jibannil_postponements', op: 'delete', match: { id: p.id } });
+  }
+}
+
 // 완료 insert 후 31일 이전 오래된 기록 정리 (멤버당 30일치만 유지)
 function jbn_pruneCompletions(memberId) {
   const todayIso = jbn_logicalToday();
@@ -422,6 +435,7 @@ export function jbn_postponeTask(taskId, originalDate, postponedTo) {
     jbn_localUpsert('postponements', row);
     jbn_enqueue({ table: 'jibannil_postponements', op: 'insert', payload: row });
   }
+  jbn_prunePostponements(me.id);
 }
 
 // ============================================================

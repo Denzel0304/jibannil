@@ -63,6 +63,13 @@ export async function jbn_initAuth() {
       jbn_emitAuth();
       return;
     }
+    // 토큰 갱신 시 채널이 끊기기 전에 선제 재연결
+    if (evt === 'TOKEN_REFRESHED' && sess) {
+      jbn_currentSession = sess;
+      jbn_scheduleRefreshWatchdog();
+      import('./sync.js').then(m => m.jbn_startRealtime()).catch(() => {});
+      return;
+    }
     if (sess) {
       jbn_currentSession = sess;
       jbn_scheduleRefreshWatchdog();
