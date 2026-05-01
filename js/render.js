@@ -197,11 +197,39 @@ function jbn_renderToday(me) {
   if (!todayItems.length && !futureItems.length) {
     listEl.appendChild(jbn_el('div', { class: 'jbn-empty' }, '쉬어가는 날이에요 ☕'));
   } else {
-    for (const item of todayItems) listEl.appendChild(jbn_renderTaskRow(me, item, todayIso));
+    // 섹션 구분선 생성 헬퍼
+    function makeDivider(label, color) {
+      const d = jbn_el('div', {
+        style: [
+          'display:flex; align-items:center; gap:8px;',
+          'margin:16px 0 8px;',
+          'font-size:12px; font-weight:700;',
+          `color:${color};`,
+          'letter-spacing:.3px;',
+        ].join(''),
+      });
+      const line = jbn_el('div', { style: `flex:1; height:1px; background:${color}; opacity:.3` });
+      d.append(jbn_el('span', {}, label), line);
+      return d;
+    }
 
-    // 미래 날짜별 섹션
+    const overdueItems = todayItems.filter(x => x.kind === 'overdue');
+    const todayOnlyItems = todayItems.filter(x => x.kind !== 'overdue');
+
+    // 밀린 일 섹션
+    if (overdueItems.length) {
+      listEl.appendChild(makeDivider(`⚠ 밀린 일 (${overdueItems.length}건)`, 'var(--jbn-warn)'));
+      for (const item of overdueItems) listEl.appendChild(jbn_renderTaskRow(me, item, todayIso));
+    }
+
+    // 오늘 일 섹션
+    if (todayOnlyItems.length) {
+      listEl.appendChild(makeDivider(`✓ 오늘 일 (${todayOnlyItems.length}건)`, 'var(--jbn-primary-d)'));
+      for (const item of todayOnlyItems) listEl.appendChild(jbn_renderTaskRow(me, item, todayIso));
+    }
+
+    // 미룬 일 — 날짜별 섹션
     if (futureItems.length) {
-      // displayDate(=postponed_to) 기준으로 날짜 그룹핑
       const byDate = {};
       for (const item of futureItems) {
         const d = item.displayDate;
@@ -209,21 +237,9 @@ function jbn_renderToday(me) {
         byDate[d].push(item);
       }
       for (const dateIso of Object.keys(byDate).sort()) {
-        // 날짜 구분선
         const dp = jbn_parseIso(dateIso);
-        const dateLabel = `${dp.getFullYear()}년 ${dp.getMonth()+1}월 ${dp.getDate()}일 ${JBN_WEEKDAY_KO[dp.getDay()]}요일 (미룬 날짜)`;
-        const divider = jbn_el('div', {
-          style: [
-            'display:flex; align-items:center; gap:8px;',
-            'margin:16px 0 8px;',
-            'font-size:12px; font-weight:700;',
-            'color:var(--jbn-warn);',
-            'letter-spacing:.3px;',
-          ].join(''),
-        });
-        const line = jbn_el('div', { style: 'flex:1; height:1px; background:var(--jbn-warn); opacity:.3' });
-        divider.append(jbn_el('span', {}, `📅 ${dateLabel}`), line);
-        listEl.appendChild(divider);
+        const dateLabel = `📅 ${dp.getFullYear()}년 ${dp.getMonth()+1}월 ${dp.getDate()}일 ${JBN_WEEKDAY_KO[dp.getDay()]}요일 (미룬 날짜)`;
+        listEl.appendChild(makeDivider(dateLabel, '#C07020'));
         for (const item of byDate[dateIso]) listEl.appendChild(jbn_renderTaskRow(me, item, todayIso));
       }
     }
