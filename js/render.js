@@ -304,7 +304,19 @@ function jbn_renderTaskRow(me, item, todayIso) {
     if (co) body.appendChild(jbn_el('div', { class: 'jbn-time' }, '완료 ' + jbn_fmtDateTime(co.completed_at)));
   }
 
-  row.append(star, body);
+  // 점3개 버튼 — PC에서 미루기 팝업 트리거 (스와이프 우→좌 대체)
+  // 완료 상태면 비활성(흐리게), 미완료일 때만 클릭 가능
+  const moreBtn = jbn_el('button', {
+    class: 'jbn-icon-btn',
+    title: '미루기',
+    style: fullyDone ? 'opacity:.25; cursor:default; flex:none' : 'flex:none',
+    onclick: (e) => {
+      e.stopPropagation();
+      if (fullyDone) return;
+      jbn_openPostponeMenu(task, occurrenceDate, todayIso);
+    },
+  }, '⋮');
+  row.append(star, body, moreBtn);
 
   // 스와이프 규칙:
   //   좌→우: 체크리스트 없음+미완료 → 완료 처리 / 나머지 모두 무반응
