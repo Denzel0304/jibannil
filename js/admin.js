@@ -471,7 +471,15 @@ function jbn_adm_buildTodayList(memberId, todayIso) {
     const into = jbnState.postponements.filter(p =>
       p.task_id === task.id && p.member_id === memberId && p.postponed_to === todayIso);
     for (const p of into) {
-      list.push({ task, occurrenceDate: p.original_date, kind: 'postponed_in' });
+      if (p.original_date === todayIso && jbn_isOccurrenceOn(task, todayIso)) {
+        // 원래 오늘 발생일인 일을 미뤘다 복귀 → today 로 편입
+        if (!list.some(x => x.task.id === task.id && x.occurrenceDate === todayIso)) {
+          list.push({ task, occurrenceDate: todayIso, kind: 'today' });
+        }
+      } else {
+        // 과거 미이행일을 오늘로 미룬 것 → 미이행 딱지 유지
+        list.push({ task, occurrenceDate: p.original_date, displayDate: todayIso, kind: 'overdue_in' });
+      }
     }
     const pasts = jbn_pastOccurrences(task, todayIso, 60);
     for (const iso of pasts) {
