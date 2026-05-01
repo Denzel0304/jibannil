@@ -471,6 +471,14 @@ function jbn_adm_buildTodayList(memberId, todayIso) {
       if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
       list.push({ task, occurrenceDate: iso, kind: 'overdue' });
     }
+    // 미래로 미뤄진 항목
+    const futurePostponed = jbnState.postponements.filter(p =>
+      p.task_id === task.id && p.member_id === memberId && p.postponed_to > todayIso
+    );
+    for (const p of futurePostponed) {
+      if (list.some(x => x.task.id === task.id && x.occurrenceDate === p.original_date && x.kind === 'postponed_future')) continue;
+      list.push({ task, occurrenceDate: p.original_date, displayDate: p.postponed_to, kind: 'postponed_future' });
+    }
   }
   return list;
 }
@@ -503,8 +511,9 @@ function jbn_renderAllTasksAdmin() {
       return a.occurrenceDate.localeCompare(b.occurrenceDate);
     });
 
-    const overdueItems = items.filter(x => x.kind === 'overdue');
-    const todayItems   = items.filter(x => x.kind !== 'overdue');
+    const overdueItems    = items.filter(x => x.kind === 'overdue');
+    const todayItems      = items.filter(x => x.kind !== 'overdue' && x.kind !== 'postponed_future');
+    const futureItems     = items.filter(x => x.kind === 'postponed_future');
 
     // 멤버 헤더
     const totalSlots = items.reduce((s, it) => {
@@ -568,6 +577,18 @@ function jbn_renderAllTasksAdmin() {
         wrap.appendChild(jbn_buildAdminTaskRow(member, it, todayIso));
       }
     }
+
+    // 미룬 일 소섹션 (미래 날짜로 미뤄진 항목)
+    if (futureItems.length) {
+      // displayDate 기준 정렬
+      futureItems.sort((a, b) => a.displayDate.localeCompare(b.displayDate));
+      wrap.appendChild(jbn_el('div', {
+        style: 'font-size:12px; font-weight:700; color:#C07020; margin:8px 0 4px 4px; letter-spacing:.3px',
+      }, `📅 미룬 일 (${futureItems.length})`));
+      for (const it of futureItems) {
+        wrap.appendChild(jbn_buildAdminTaskRow(member, it, todayIso));
+      }
+    }
   }
 
   return wrap;
@@ -575,18 +596,19 @@ function jbn_renderAllTasksAdmin() {
 
 // 개별 할일 카드 (관리자용 — 완료/미완료 토글 포함)
 function jbn_buildAdminTaskRow(member, item, todayIso) {
-  const { task, occurrenceDate, kind } = item;
+  const { task, occurrenceDate, displayDate, kind } = item;
   const checklists = jbnState.checklist
     .filter(c => c.task_id === task.id)
     .sort((a, b) => a.sort_order - b.sort_order);
   const hasChecklist = checklists.length > 0;
 
-  const isOverdue  = kind === 'overdue';
-  const isPostponed = kind === 'postponed_in';
-  const isFullyDone = jbn_adm_taskIsFullyDone(task, member.id, occurrenceDate);
+  const isOverdue    = kind === 'overdue';
+  const isPostponed  = kind === 'postponed_in';
+  const isFuture     = kind === 'postponed_future';
+  const isFullyDone  = jbn_adm_taskIsFullyDone(task, member.id, occurrenceDate);
 
   const card = jbn_el('div', {
-    class: 'jbn-task' + (isFullyDone ? ' done' : '') + (isOverdue ? ' overdue' : '') + (isPostponed ? ' postin' : ''),
+    class: 'jbn-task' + (isFullyDone ? ' done' : '') + (isOverdue ? ' overdue' : '') + ((isPostponed || isFuture) ? ' postin' : ''),
     style: 'margin-bottom:8px',
   });
 
@@ -614,6 +636,11 @@ function jbn_buildAdminTaskRow(member, item, todayIso) {
     titleRow.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `밀린: ${occurrenceDate}`));
   } else if (isPostponed) {
     titleRow.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미뤄옴: ${occurrenceDate}`));
+  } else if (isFuture) {
+    titleRow.appendChild(jbn_el('span', {
+      class: 'jbn-chip warn',
+      style: 'color:var(--jbn-warn); background:var(--jbn-warn-bg)',
+    }, `미룬 날짜: ${displayDate}`));
   }
   body.appendChild(titleRow);
 

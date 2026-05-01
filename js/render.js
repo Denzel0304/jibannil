@@ -189,17 +189,51 @@ function jbn_renderToday(me) {
 
   // 리스트
   const listEl = jbn_el('div', { class: 'jbn-task-list' });
-  if (!list.length) {
+
+  // 오늘/밀린 항목과 미래 미룬 항목 분리
+  const todayItems   = list.filter(x => x.kind !== 'postponed_future');
+  const futureItems  = list.filter(x => x.kind === 'postponed_future');
+
+  if (!todayItems.length && !futureItems.length) {
     listEl.appendChild(jbn_el('div', { class: 'jbn-empty' }, '쉬어가는 날이에요 ☕'));
   } else {
-    for (const item of list) listEl.appendChild(jbn_renderTaskRow(me, item, todayIso));
+    for (const item of todayItems) listEl.appendChild(jbn_renderTaskRow(me, item, todayIso));
+
+    // 미래 날짜별 섹션
+    if (futureItems.length) {
+      // displayDate(=postponed_to) 기준으로 날짜 그룹핑
+      const byDate = {};
+      for (const item of futureItems) {
+        const d = item.displayDate;
+        if (!byDate[d]) byDate[d] = [];
+        byDate[d].push(item);
+      }
+      for (const dateIso of Object.keys(byDate).sort()) {
+        // 날짜 구분선
+        const dp = jbn_parseIso(dateIso);
+        const dateLabel = `${dp.getFullYear()}년 ${dp.getMonth()+1}월 ${dp.getDate()}일 ${JBN_WEEKDAY_KO[dp.getDay()]}요일 (미룬 날짜)`;
+        const divider = jbn_el('div', {
+          style: [
+            'display:flex; align-items:center; gap:8px;',
+            'margin:16px 0 8px;',
+            'font-size:12px; font-weight:700;',
+            'color:var(--jbn-warn);',
+            'letter-spacing:.3px;',
+          ].join(''),
+        });
+        const line = jbn_el('div', { style: 'flex:1; height:1px; background:var(--jbn-warn); opacity:.3' });
+        divider.append(jbn_el('span', {}, `📅 ${dateLabel}`), line);
+        listEl.appendChild(divider);
+        for (const item of byDate[dateIso]) listEl.appendChild(jbn_renderTaskRow(me, item, todayIso));
+      }
+    }
   }
   wrap.appendChild(listEl);
   return wrap;
 }
 
 function jbn_renderTaskRow(me, item, todayIso) {
-  const { task, occurrenceDate, kind } = item;
+  const { task, occurrenceDate, displayDate, kind } = item;
   const loc = jbnState.locations.find(l => l.id === task.location_id);
   const cls = jbnState.checklist
     .filter(c => c.task_id === task.id)
@@ -211,7 +245,8 @@ function jbn_renderTaskRow(me, item, todayIso) {
     class: 'jbn-task' +
       (fullyDone ? ' done' : '') +
       (kind === 'overdue' ? ' overdue' : '') +
-      (kind === 'postponed_in' ? ' postin' : ''),
+      (kind === 'postponed_in' ? ' postin' : '') +
+      (kind === 'postponed_future' ? ' postin' : ''),
     dataset: { dragId: task.id },
   });
 
@@ -230,6 +265,10 @@ function jbn_renderTaskRow(me, item, todayIso) {
   }
   if (kind === 'postponed_in') {
     sub.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, '미룬 일'));
+  }
+  if (kind === 'postponed_future') {
+    // displayDate = postponed_to (미래 날짜)
+    sub.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미룬 날짜: ${displayDate}`));
   }
   body.append(titleLine, sub);
 
@@ -287,7 +326,7 @@ function jbn_renderTaskRow(me, item, todayIso) {
         else { jbn_markComplete(task.id, null, occurrenceDate); jbn_playCompleteSound(); }
       }
     },
-    onSwipeLeft: () => jbn_openPostponeMenu(task, occurrenceDate, todayIso),
+    onSwipeLeft: () => kind === 'postponed_future' ? null : jbn_openPostponeMenu(task, occurrenceDate, todayIso),
   });
 
   // 단일 클릭 (체크리스트 없을 때만) — body 클릭 또는 별표 클릭

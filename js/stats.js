@@ -110,14 +110,25 @@ export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 60) {
       if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
       list.push({ task, occurrenceDate: iso, displayDate: iso, kind: 'overdue' });
     }
+    // 4) 미래로 미뤄진 항목 → postponed_future
+    //    (오늘 이후 날짜로 미뤄진 postponements 레코드)
+    const futurePostponed = jbnState.postponements.filter(p =>
+      p.task_id === task.id && p.member_id === memberId && p.postponed_to > todayIso
+    );
+    for (const p of futurePostponed) {
+      // 이미 목록에 없으면 추가
+      if (list.some(x => x.task.id === task.id && x.occurrenceDate === p.original_date && x.kind === 'postponed_future')) continue;
+      list.push({ task, occurrenceDate: p.original_date, displayDate: p.postponed_to, kind: 'postponed_future' });
+    }
   }
 
-  // 정렬: overdue(오래된 순) → today/postponed_in(task.sort_order)
+  // 정렬: overdue(오래된 순) → today/postponed_in(sort_order) → postponed_future(날짜순)
   list.sort((a, b) => {
-    if (a.kind === 'overdue' && b.kind !== 'overdue') return -1;
-    if (b.kind === 'overdue' && a.kind !== 'overdue') return 1;
-    if (a.kind === 'overdue' && b.kind === 'overdue') return a.occurrenceDate.localeCompare(b.occurrenceDate);
-    // 같은 위치 -> sort_order
+    const rankKind = k => k === 'overdue' ? 0 : k === 'postponed_future' ? 2 : 1;
+    const ra = rankKind(a.kind), rb = rankKind(b.kind);
+    if (ra !== rb) return ra - rb;
+    if (a.kind === 'overdue') return a.occurrenceDate.localeCompare(b.occurrenceDate);
+    if (a.kind === 'postponed_future') return a.displayDate.localeCompare(b.displayDate);
     return (a.task.sort_order || 0) - (b.task.sort_order || 0);
   });
   return list;
