@@ -10,10 +10,39 @@ import { jbn_loadSnapshot, jbn_fetchAll, jbn_onStateChange } from './store.js';
 import { jbn_startRealtime } from './sync.js';
 import { jbn_paint, jbn_setRoute, jbn_schedulePaint_exported as jbn_schedulePaint } from './render.js';
 import { jbn_$, jbn_el, jbn_clear, jbn_toast } from './util.js';
+import { jbn_unlockAudio } from './interactions.js';
 
 // 내부에서 재렌더 트리거할 때 쓰는 커스텀 이벤트 (admin 등에서 발사)
 document.addEventListener('jbn:rerender', () => jbn_schedulePaint());
 
+// ============================================================
+// 스플래시 제어
+// ============================================================
+let jbn_splashDone = false;
+
+// 스플래시 → '시작하려면 터치하세요' 문구 표시
+function jbn_splashShowTouch() {
+  const el = document.getElementById('jbnSplashTouch');
+  if (el) el.classList.add('show');
+}
+
+// 터치 후: 오디오 unlock → 스플래시 페이드아웃 → 실제 앱 표시
+function jbn_splashDismiss() {
+  if (jbn_splashDone) return;
+  jbn_splashDone = true;
+
+  jbn_unlockAudio(); // 사용자 인터랙션 컨텍스트에서 AudioContext 활성화
+
+  const splash = document.getElementById('jbnSplash');
+  if (splash) {
+    splash.classList.add('hide');
+    splash.addEventListener('transitionend', () => splash.remove(), { once: true });
+  }
+}
+
+// ============================================================
+// 부트
+// ============================================================
 async function jbn_boot() {
   // 1) 캐시된 스냅샷 즉시 로드 (오프라인 첫 화면 띄우기용)
   jbn_loadSnapshot();
@@ -21,7 +50,7 @@ async function jbn_boot() {
   // 2) 인증 초기화
   await jbn_initAuth();
 
-  // 3) UI 진입
+  // 3) UI 진입 (스플래시 뒤에 미리 렌더 준비)
   jbn_routeByAuth();
 
   // 4) 인증 상태 바뀌면 다시 라우팅 (debounce: 토큰 갱신 중 일시적 null 무시)
@@ -30,6 +59,13 @@ async function jbn_boot() {
     clearTimeout(jbn_authRouteTimer);
     jbn_authRouteTimer = setTimeout(() => jbn_routeByAuth(), 300);
   });
+
+  // 5) 로딩 완료 → 터치 문구 표시, 클릭하면 스플래시 닫기
+  jbn_splashShowTouch();
+  const splash = document.getElementById('jbnSplash');
+  if (splash) {
+    splash.addEventListener('click', jbn_splashDismiss, { once: true });
+  }
 }
 
 // 이미 메인 화면이 떠 있으면 재진입하지 않음 (세션 일시 null → 화면 깜빡임 방지)
@@ -127,6 +163,9 @@ function jbn_renderUnregistered() {
 // 시작
 jbn_boot().catch(err => {
   console.error(err);
+  // 오류 시 스플래시 즉시 제거 후 에러 표시
+  const splash = document.getElementById('jbnSplash');
+  if (splash) splash.remove();
   const app = jbn_$('#jbnApp');
   if (app) {
     jbn_clear(app);
