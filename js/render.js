@@ -278,6 +278,7 @@ function jbn_renderTaskRow(me, item, todayIso) {
   if (kind === 'overdue') {
     const day = jbn_diffDays(todayIso, occurrenceDate);
     sub.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `${day}일 밀림`));
+    sub.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
   }
   if (kind === 'postponed_in') {
     sub.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, '미룬 일'));
