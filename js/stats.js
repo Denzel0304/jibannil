@@ -37,8 +37,10 @@ function jbn_isAssignee(taskId, memberId) {
 }
 
 function jbn_postponedAwayBy(taskId, memberId, originalDate) {
+  // postponed_to 가 original_date 와 같으면 제자리 복귀 → away 아님
   return jbnState.postponements.some(p =>
-    p.task_id === taskId && p.member_id === memberId && p.original_date === originalDate);
+    p.task_id === taskId && p.member_id === memberId && p.original_date === originalDate
+    && p.postponed_to !== originalDate);
 }
 
 function jbn_postponedToHere(taskId, memberId, todayIso) {
@@ -96,11 +98,21 @@ export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 60) {
         list.push({ task, occurrenceDate: todayIso, displayDate: todayIso, kind: 'today' });
       }
     }
-    // 2) 다른 어떤 발생일을 오늘로 미뤘으면 postponed_in (중복 방지: 위 kind:'today'와 같은 날일 일은 없음)
+    // 2) 다른 어떤 발생일을 오늘로 미뤘으면
+    //    - original_date === todayIso : 원래 오늘 일을 미뤘다 복귀 → today 로 처리
+    //    - original_date < todayIso  : 과거 미이행일을 오늘로 미룬 것 → overdue 딱지 유지
     const into = jbnState.postponements.filter(p =>
       p.task_id === task.id && p.member_id === memberId && p.postponed_to === todayIso);
     for (const p of into) {
-      list.push({ task, occurrenceDate: p.original_date, displayDate: todayIso, kind: 'postponed_in' });
+      if (p.original_date === todayIso) {
+        // 원래 오늘 일 → today 로 편입 (이미 1)에서 isPostponedAway 로 빠졌으므로 여기서 추가)
+        if (!list.some(x => x.task.id === task.id && x.occurrenceDate === todayIso)) {
+          list.push({ task, occurrenceDate: todayIso, displayDate: todayIso, kind: 'today' });
+        }
+      } else {
+        // 과거 미이행일을 오늘로 미룬 것 → 미이행 딱지 유지
+        list.push({ task, occurrenceDate: p.original_date, displayDate: todayIso, kind: 'overdue_in' });
+      }
     }
     // 3) 과거 발생일 중 미완료 + 미연기 → overdue
     const pasts = jbn_pastOccurrences(task, todayIso, lookbackDays);
@@ -124,7 +136,7 @@ export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 60) {
 
   // 정렬: overdue(오래된 순) → today/postponed_in(sort_order) → postponed_future(날짜순)
   list.sort((a, b) => {
-    const rankKind = k => k === 'overdue' ? 0 : k === 'postponed_future' ? 2 : 1;
+    const rankKind = k => (k === 'overdue' || k === 'overdue_in') ? 0 : k === 'postponed_future' ? 2 : 1;
     const ra = rankKind(a.kind), rb = rankKind(b.kind);
     if (ra !== rb) return ra - rb;
     if (a.kind === 'overdue') return a.occurrenceDate.localeCompare(b.occurrenceDate);
