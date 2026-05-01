@@ -437,12 +437,9 @@ function jbn_openTaskEditor(taskId, locationId) {
 function jbn_adm_isAssignee(taskId, memberId) {
   return jbnState.task_assignees.some(a => a.task_id === taskId && a.member_id === memberId);
 }
-function jbn_adm_postponedAwayBy(taskId, memberId, originalDate, todayIso) {
-  return jbnState.postponements.some(p => {
-    if (p.task_id !== taskId || p.member_id !== memberId || p.original_date !== originalDate) return false;
-    if (originalDate === todayIso && p.postponed_to === todayIso) return false;
-    return true;
-  });
+function jbn_adm_postponedAwayBy(taskId, memberId, originalDate) {
+  return jbnState.postponements.some(p =>
+    p.task_id === taskId && p.member_id === memberId && p.original_date === originalDate);
 }
 function jbn_adm_completedSlot(taskId, checklistId, memberId, targetDate) {
   return jbnState.completions.find(c =>
@@ -462,56 +459,30 @@ function jbn_adm_taskIsFullyDone(task, memberId, targetDate) {
   return slots.length > 0 && slots.every(s => jbn_adm_completedSlot(task.id, s.checklistId, memberId, targetDate));
 }
 function jbn_adm_buildTodayList(memberId, todayIso) {
-  const seen = new Set();
   const list = [];
   const myTasks = jbnState.tasks.filter(t => jbn_adm_isAssignee(t.id, memberId));
-
   for (const task of myTasks) {
-    const tid = task.id;
-
-    // A-1) 오늘로 미뤄온 것
-    const intoToday = jbnState.postponements.filter(p =>
-      p.task_id === tid && p.member_id === memberId && p.postponed_to === todayIso);
-    for (const p of intoToday) {
-      const key = tid + ':' + p.original_date;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (p.original_date === todayIso) {
-        list.push({ task, occurrenceDate: todayIso, displayDate: todayIso, kind: 'today' });
-      } else {
-        list.push({ task, occurrenceDate: p.original_date, displayDate: todayIso, kind: 'overdue_in' });
-      }
+    if (jbn_isOccurrenceOn(task, todayIso) && !jbn_adm_postponedAwayBy(task.id, memberId, todayIso)) {
+      list.push({ task, occurrenceDate: todayIso, kind: 'today' });
     }
-
-    // A-2) 미래로 미뤄진 것
-    const intoFuture = jbnState.postponements.filter(p =>
-      p.task_id === tid && p.member_id === memberId && p.postponed_to > todayIso);
-    for (const p of intoFuture) {
-      const key = tid + ':' + p.original_date;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      list.push({ task, occurrenceDate: p.original_date, displayDate: p.postponed_to, kind: 'postponed_future' });
+    const into = jbnState.postponements.filter(p =>
+      p.task_id === task.id && p.member_id === memberId && p.postponed_to === todayIso);
+    for (const p of into) {
+      list.push({ task, occurrenceDate: p.original_date, kind: 'postponed_in' });
     }
-
-    // B-1) 오늘이 발생일이고 postpone 레코드 없는 것 → today
-    if (jbn_isOccurrenceOn(task, todayIso)) {
-      const key = tid + ':' + todayIso;
-      if (!seen.has(key)) {
-        seen.add(key);
-        list.push({ task, occurrenceDate: todayIso, displayDate: todayIso, kind: 'today' });
-      }
-    }
-
-    // B-2) 과거 발생일 중 postpone 레코드 없는 것 → overdue
     const pasts = jbn_pastOccurrences(task, todayIso, 60);
     for (const iso of pasts) {
-      const hasPostpone = jbnState.postponements.some(p =>
-        p.task_id === tid && p.member_id === memberId && p.original_date === iso);
-      if (hasPostpone) continue;
-      const key = tid + ':' + iso;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      list.push({ task, occurrenceDate: iso, displayDate: iso, kind: 'overdue' });
+      if (jbn_adm_postponedAwayBy(task.id, memberId, iso)) continue;
+      if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
+      list.push({ task, occurrenceDate: iso, kind: 'overdue' });
+    }
+    // 미래로 미뤄진 항목
+    const futurePostponed = jbnState.postponements.filter(p =>
+      p.task_id === task.id && p.member_id === memberId && p.postponed_to > todayIso
+    );
+    for (const p of futurePostponed) {
+      if (list.some(x => x.task.id === task.id && x.occurrenceDate === p.original_date && x.kind === 'postponed_future')) continue;
+      list.push({ task, occurrenceDate: p.original_date, displayDate: p.postponed_to, kind: 'postponed_future' });
     }
   }
   return list;
@@ -538,14 +509,14 @@ function jbn_renderAllTasksAdmin() {
     // 정렬: overdue 먼저(오래된 순) → today/postponed_in(오래된 순)
     // jbn_buildTodayList 이미 overdue 먼저 정렬하지만 today 는 sort_order 기준 → occurrenceDate 기준으로 재정렬
     items.sort((a, b) => {
-      const aOver = a.kind === 'overdue' || a.kind === 'overdue_in';
-      const bOver = b.kind === 'overdue' || b.kind === 'overdue_in';
+      const aOver = a.kind === 'overdue';
+      const bOver = b.kind === 'overdue';
       if (aOver && !bOver) return -1;
       if (!aOver && bOver) return 1;
       return a.occurrenceDate.localeCompare(b.occurrenceDate);
     });
 
-    const overdueItems    = items.filter(x => x.kind === 'overdue' || x.kind === 'overdue_in');
+    const overdueItems    = items.filter(x => x.kind === 'overdue');
     const todayItems      = items.filter(x => x.kind !== 'overdue' && x.kind !== 'postponed_future');
     const futureItems     = items.filter(x => x.kind === 'postponed_future');
 
@@ -636,7 +607,7 @@ function jbn_buildAdminTaskRow(member, item, todayIso) {
     .sort((a, b) => a.sort_order - b.sort_order);
   const hasChecklist = checklists.length > 0;
 
-  const isOverdue    = kind === 'overdue' || kind === 'overdue_in';
+  const isOverdue    = kind === 'overdue';
   const isPostponed  = kind === 'postponed_in';
   const isFuture     = kind === 'postponed_future';
   const isFullyDone  = jbn_adm_taskIsFullyDone(task, member.id, occurrenceDate);
@@ -666,14 +637,11 @@ function jbn_buildAdminTaskRow(member, item, todayIso) {
   // 제목 + chip들
   const titleRow = jbn_el('div', { style: 'display:flex; align-items:center; gap:6px; flex-wrap:wrap' });
   titleRow.appendChild(jbn_el('span', { class: 'jbn-task-title' }, task.title));
-  if (kind === 'overdue') {
-    titleRow.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
-  } else if (kind === 'overdue_in') {
+  if (isOverdue) {
     titleRow.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
   } else if (isPostponed) {
     titleRow.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미뤄옴: ${occurrenceDate}`));
   } else if (isFuture) {
-    titleRow.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
     titleRow.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미룬 날짜: ${displayDate}`));
   }
   body.appendChild(titleRow);

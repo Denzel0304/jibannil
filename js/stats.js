@@ -36,13 +36,9 @@ function jbn_isAssignee(taskId, memberId) {
   return jbnState.task_assignees.some(a => a.task_id === taskId && a.member_id === memberId);
 }
 
-function jbn_postponedAwayBy(taskId, memberId, originalDate, todayIso) {
-  return jbnState.postponements.some(p => {
-    if (p.task_id !== taskId || p.member_id !== memberId || p.original_date !== originalDate) return false;
-    // 오늘 일을 미뤘다가 오늘로 복귀한 경우(original_date === todayIso === postponed_to) → away 아님
-    if (originalDate === todayIso && p.postponed_to === todayIso) return false;
-    return true;
-  });
+function jbn_postponedAwayBy(taskId, memberId, originalDate) {
+  return jbnState.postponements.some(p =>
+    p.task_id === taskId && p.member_id === memberId && p.original_date === originalDate);
 }
 
 function jbn_postponedToHere(taskId, memberId, todayIso) {
@@ -89,74 +85,49 @@ export function jbn_taskIsFullyDone(task, memberId, targetDate) {
 //       overdue: 과거 발생인데 미완료/미연기 (빨간 강조)
 // ============================================================
 export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 60) {
-  // 중복 방지용 Set: "taskId:occurrenceDate"
-  const seen = new Set();
   const list = [];
   const myTasks = jbnState.tasks.filter(t => jbn_isAssignee(t.id, memberId));
 
   for (const task of myTasks) {
-    const tid = task.id;
-
-    // ── A. postponements 레코드 기준으로 먼저 처리 ──────────────
-    // original_date 가 태어난 날짜. 이것만으로 오늘 태생/과거 태생 판단.
-
-    // A-1) 오늘로 미뤄온 것 (postponed_to === todayIso)
-    const intoToday = jbnState.postponements.filter(p =>
-      p.task_id === tid && p.member_id === memberId && p.postponed_to === todayIso);
-    for (const p of intoToday) {
-      const key = tid + ':' + p.original_date;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (p.original_date === todayIso) {
-        // 오늘 태생을 미뤘다가 오늘로 복귀 → today
-        list.push({ task, occurrenceDate: todayIso, displayDate: todayIso, kind: 'today' });
-      } else {
-        // 과거 태생 → 미이행 딱지 유지 (어디서 왔든 original_date 가 과거면 overdue_in)
-        list.push({ task, occurrenceDate: p.original_date, displayDate: todayIso, kind: 'overdue_in' });
-      }
-    }
-
-    // A-2) 미래로 미뤄진 것 (postponed_to > todayIso)
-    const intoFuture = jbnState.postponements.filter(p =>
-      p.task_id === tid && p.member_id === memberId && p.postponed_to > todayIso);
-    for (const p of intoFuture) {
-      const key = tid + ':' + p.original_date;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      list.push({ task, occurrenceDate: p.original_date, displayDate: p.postponed_to, kind: 'postponed_future' });
-    }
-
-    // ── B. postponements 없는 것: 발생일 기준 ───────────────────
-
-    // B-1) 오늘이 발생일이고 postpone 레코드 자체가 없는 것 → today
+    // 1) 오늘이 원래 발생일이면서, 내가 오늘 자를 미루지 않았으면 today
     if (jbn_isOccurrenceOn(task, todayIso)) {
-      const key = tid + ':' + todayIso;
-      if (!seen.has(key)) {
-        seen.add(key);
+      const isPostponedAway = jbn_postponedAwayBy(task.id, memberId, todayIso);
+      if (!isPostponedAway) {
         list.push({ task, occurrenceDate: todayIso, displayDate: todayIso, kind: 'today' });
       }
     }
-
-    // B-2) 과거 발생일 중 postpone 레코드 없고 미처리된 것 → overdue
+    // 2) 다른 어떤 발생일을 오늘로 미뤘으면 postponed_in (중복 방지: 위 kind:'today'와 같은 날일 일은 없음)
+    const into = jbnState.postponements.filter(p =>
+      p.task_id === task.id && p.member_id === memberId && p.postponed_to === todayIso);
+    for (const p of into) {
+      list.push({ task, occurrenceDate: p.original_date, displayDate: todayIso, kind: 'postponed_in' });
+    }
+    // 3) 과거 발생일 중 미완료 + 미연기 → overdue
     const pasts = jbn_pastOccurrences(task, todayIso, lookbackDays);
     for (const iso of pasts) {
-      // postponements 레코드가 있으면 A에서 이미 처리됨
-      const hasPostpone = jbnState.postponements.some(p =>
-        p.task_id === tid && p.member_id === memberId && p.original_date === iso);
-      if (hasPostpone) continue;
-      const key = tid + ':' + iso;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      if (jbn_postponedAwayBy(task.id, memberId, iso)) continue;
+      // 이미 다른 항목으로 들어가있는지(같은 task + 같은 occurrenceDate) 체크
+      if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
       list.push({ task, occurrenceDate: iso, displayDate: iso, kind: 'overdue' });
+    }
+    // 4) 미래로 미뤄진 항목 → postponed_future
+    //    (오늘 이후 날짜로 미뤄진 postponements 레코드)
+    const futurePostponed = jbnState.postponements.filter(p =>
+      p.task_id === task.id && p.member_id === memberId && p.postponed_to > todayIso
+    );
+    for (const p of futurePostponed) {
+      // 이미 목록에 없으면 추가
+      if (list.some(x => x.task.id === task.id && x.occurrenceDate === p.original_date && x.kind === 'postponed_future')) continue;
+      list.push({ task, occurrenceDate: p.original_date, displayDate: p.postponed_to, kind: 'postponed_future' });
     }
   }
 
-  // 정렬: overdue/overdue_in(오래된 순) → today(sort_order) → postponed_future(날짜순)
+  // 정렬: overdue(오래된 순) → today/postponed_in(sort_order) → postponed_future(날짜순)
   list.sort((a, b) => {
-    const rankKind = k => (k === 'overdue' || k === 'overdue_in') ? 0 : k === 'postponed_future' ? 2 : 1;
+    const rankKind = k => k === 'overdue' ? 0 : k === 'postponed_future' ? 2 : 1;
     const ra = rankKind(a.kind), rb = rankKind(b.kind);
     if (ra !== rb) return ra - rb;
-    if (ra === 0) return a.occurrenceDate.localeCompare(b.occurrenceDate);
+    if (a.kind === 'overdue') return a.occurrenceDate.localeCompare(b.occurrenceDate);
     if (a.kind === 'postponed_future') return a.displayDate.localeCompare(b.displayDate);
     return (a.task.sort_order || 0) - (b.task.sort_order || 0);
   });
@@ -225,7 +196,7 @@ export function jbn_periodStats(memberId, fromIso, toIso) {
       let s = 0, d = 0;
       for (const task of myTasks) {
         // 그 날 원래 발생 + 그 날을 미루지 않음 → 그 날 슬롯
-        const occToday = jbn_isOccurrenceOn(task, cursor) && !jbn_postponedAwayBy(task.id, memberId, cursor, cursor);
+        const occToday = jbn_isOccurrenceOn(task, cursor) && !jbn_postponedAwayBy(task.id, memberId, cursor);
         // 다른 날에서 그 날로 미뤘다면도 포함
         const inHere = jbnState.postponements.some(p =>
           p.task_id === task.id && p.member_id === memberId && p.postponed_to === cursor);
