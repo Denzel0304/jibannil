@@ -213,7 +213,7 @@ function jbn_renderToday(me) {
       return d;
     }
 
-    const overdueItems = todayItems.filter(x => x.kind === 'overdue');
+    const overdueItems = todayItems.filter(x => x.kind === 'overdue' || x.kind === 'overdue_in');
     const todayOnlyItems = todayItems.filter(x => x.kind !== 'overdue');
 
     // 밀린 일 섹션
@@ -260,7 +260,7 @@ function jbn_renderTaskRow(me, item, todayIso) {
   const row = jbn_el('div', {
     class: 'jbn-task' +
       (fullyDone ? ' done' : '') +
-      (kind === 'overdue' ? ' overdue' : '') +
+      ((kind === 'overdue' || kind === 'overdue_in') ? ' overdue' : '') +
       (kind === 'postponed_in' ? ' postin' : '') +
       (kind === 'postponed_future' ? ' postin' : ''),
     dataset: { dragId: task.id },
@@ -278,6 +278,10 @@ function jbn_renderTaskRow(me, item, todayIso) {
   if (kind === 'overdue') {
     const day = jbn_diffDays(todayIso, occurrenceDate);
     sub.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `${day}일 밀림`));
+    sub.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
+  }
+  if (kind === 'overdue_in') {
+    // 과거 미이행일을 오늘로 미룬 것 — 미이행 딱지 유지
     sub.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
   }
   if (kind === 'postponed_in') {
