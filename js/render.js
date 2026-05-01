@@ -377,7 +377,10 @@ function jbn_openPostponeMenu(task, occurrenceDate, todayIso) {
 function jbn_renderStats(me) {
   const todayIso = jbn_logicalToday();
   const wrap = jbn_el('section', { class: 'jbn-page' });
-  wrap.appendChild(jbn_el('h2', { class: 'jbn-h2' }, '통계'));
+  const statsHeader = jbn_el('h2', { class: 'jbn-h2', style: 'display:flex;align-items:center;justify-content:center;gap:6px;text-align:center' });
+  statsHeader.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>';
+  statsHeader.appendChild(document.createTextNode('통계'));
+  wrap.appendChild(statsHeader);
 
   // 오늘 — 전체 구성원
   const todayCard = jbn_el('div', { class: 'jbn-card' });

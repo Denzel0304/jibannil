@@ -63,7 +63,12 @@ function jbn_renderLocationsAdmin() {
 
   const wrap = jbn_el('div', {});
   wrap.appendChild(jbn_el('div', { class: 'jbn-section-head' },
-    jbn_el('h2', { class: 'jbn-h2', style: 'flex:1;text-align:center' }, '장소'),
+    (() => {
+      const h = jbn_el('h2', { class: 'jbn-h2', style: 'flex:1;text-align:center;display:flex;align-items:center;justify-content:center;gap:6px' });
+      h.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+      h.appendChild(document.createTextNode('장소'));
+      return h;
+    })(),
     jbn_el('button', {
       class: 'jbn-btn jbn-btn-primary',
       onclick: async () => {
@@ -633,7 +638,7 @@ function jbn_buildAdminTaskRow(member, item, todayIso) {
   const titleRow = jbn_el('div', { style: 'display:flex; align-items:center; gap:6px; flex-wrap:wrap' });
   titleRow.appendChild(jbn_el('span', { class: 'jbn-task-title' }, task.title));
   if (isOverdue) {
-    titleRow.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `밀린: ${occurrenceDate}`));
+    titleRow.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
   } else if (isPostponed) {
     titleRow.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미뤄옴: ${occurrenceDate}`));
   } else if (isFuture) {
