@@ -16,7 +16,7 @@ import {
 } from './sync.js';
 import {
   jbn_$, jbn_$$, jbn_el, jbn_clear, jbn_logicalToday, jbn_isoDate,
-  jbn_addDays, jbn_fmtTime, jbn_parseIso, jbn_diffDays, JBN_WEEKDAY_KO, jbn_toast,
+  jbn_addDays, jbn_fmtTime, jbn_fmtDateTime, jbn_parseIso, jbn_diffDays, JBN_WEEKDAY_KO, jbn_toast,
 } from './util.js';
 import { jbn_attachSwipe, jbn_dragLockState, jbn_playCompleteSound } from './interactions.js';
 import { jbn_recurrenceLabel } from './recurrence.js';
@@ -253,7 +253,7 @@ function jbn_renderTaskRow(me, item, todayIso) {
         const co = jbnState.completions.find(co =>
           co.task_id === task.id && co.checklist_id === c.id &&
           co.member_id === me.id && co.target_date === occurrenceDate);
-        if (co) ckRow.appendChild(jbn_el('span', { class: 'jbn-check-time' }, jbn_fmtTime(co.completed_at)));
+        if (co) ckRow.appendChild(jbn_el('span', { class: 'jbn-check-time' }, jbn_fmtDateTime(co.completed_at)));
       }
       subWrap.appendChild(ckRow);
     }
@@ -262,7 +262,7 @@ function jbn_renderTaskRow(me, item, todayIso) {
     const co = jbnState.completions.find(co =>
       co.task_id === task.id && !co.checklist_id &&
       co.member_id === me.id && co.target_date === occurrenceDate);
-    if (co) body.appendChild(jbn_el('div', { class: 'jbn-time' }, '완료 ' + jbn_fmtTime(co.completed_at)));
+    if (co) body.appendChild(jbn_el('div', { class: 'jbn-time' }, '완료 ' + jbn_fmtDateTime(co.completed_at)));
   }
 
   row.append(star, body);

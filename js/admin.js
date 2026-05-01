@@ -16,7 +16,7 @@ import {
   jbn_markCompleteAs, jbn_unmarkCompleteAs,
 } from './sync.js';
 import {
-  jbn_$, jbn_el, jbn_clear, jbn_logicalToday, jbn_isoDate, JBN_WEEKDAY_KO,
+  jbn_$, jbn_el, jbn_clear, jbn_logicalToday, jbn_isoDate, JBN_WEEKDAY_KO, jbn_fmtDateTime,
 } from './util.js';
 import {
   jbn_openModal, jbn_closeModal, jbn_closeAllModals, jbn_confirm, jbn_alert, jbn_prompt, jbn_pickDate,
@@ -636,6 +636,12 @@ function jbn_buildAdminTaskRow(member, item, todayIso) {
       const row = jbn_el('div', { class: 'jbn-check' + (isDone ? ' on' : ''), style: 'cursor:pointer' });
       row.appendChild(jbn_el('span', { class: 'jbn-check-mark' }, isDone ? '★' : '☆'));
       row.appendChild(jbn_el('span', { class: 'jbn-check-title' }, cl.title));
+      if (isDone) {
+        const co = jbnState.completions.find(c =>
+          c.task_id === task.id && c.checklist_id === cl.id &&
+          c.member_id === member.id && c.target_date === occurrenceDate);
+        if (co) row.appendChild(jbn_el('span', { class: 'jbn-check-time' }, jbn_fmtDateTime(co.completed_at)));
+      }
       row.addEventListener('click', () => {
         if (isDone) {
           jbn_unmarkCompleteAs(member.id, task.id, cl.id, occurrenceDate);
@@ -647,6 +653,11 @@ function jbn_buildAdminTaskRow(member, item, todayIso) {
       clWrap.appendChild(row);
     }
     body.appendChild(clWrap);
+  } else if (isFullyDone) {
+    const co = jbnState.completions.find(c =>
+      c.task_id === task.id && !c.checklist_id &&
+      c.member_id === member.id && c.target_date === occurrenceDate);
+    if (co) body.appendChild(jbn_el('div', { class: 'jbn-time' }, '완료 ' + jbn_fmtDateTime(co.completed_at)));
   }
 
   card.appendChild(body);

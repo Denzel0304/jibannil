@@ -66,6 +66,16 @@ export function jbn_fmtTime(ts) {
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
+// 년월일 + 시간 (완료 시각 표시용)
+export function jbn_fmtDateTime(ts) {
+  const d = new Date(ts);
+  const m = d.getMonth() + 1;
+  const day = d.getDate();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${m}/${day} ${hh}:${mm}`;
+}
+
 // --- DOM ----------
 export function jbn_$(sel, root = document) { return root.querySelector(sel); }
 export function jbn_$$(sel, root = document) { return Array.from(root.querySelectorAll(sel)); }
