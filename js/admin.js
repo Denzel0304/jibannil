@@ -509,14 +509,14 @@ function jbn_renderAllTasksAdmin() {
     // 정렬: overdue 먼저(오래된 순) → today/postponed_in(오래된 순)
     // jbn_buildTodayList 이미 overdue 먼저 정렬하지만 today 는 sort_order 기준 → occurrenceDate 기준으로 재정렬
     items.sort((a, b) => {
-      const aOver = a.kind === 'overdue';
-      const bOver = b.kind === 'overdue';
+      const aOver = a.kind === 'overdue' || a.kind === 'overdue_in';
+      const bOver = b.kind === 'overdue' || b.kind === 'overdue_in';
       if (aOver && !bOver) return -1;
       if (!aOver && bOver) return 1;
       return a.occurrenceDate.localeCompare(b.occurrenceDate);
     });
 
-    const overdueItems    = items.filter(x => x.kind === 'overdue');
+    const overdueItems    = items.filter(x => x.kind === 'overdue' || x.kind === 'overdue_in');
     const todayItems      = items.filter(x => x.kind !== 'overdue' && x.kind !== 'postponed_future');
     const futureItems     = items.filter(x => x.kind === 'postponed_future');
 
@@ -607,7 +607,7 @@ function jbn_buildAdminTaskRow(member, item, todayIso) {
     .sort((a, b) => a.sort_order - b.sort_order);
   const hasChecklist = checklists.length > 0;
 
-  const isOverdue    = kind === 'overdue';
+  const isOverdue    = kind === 'overdue' || kind === 'overdue_in';
   const isPostponed  = kind === 'postponed_in';
   const isFuture     = kind === 'postponed_future';
   const isFullyDone  = jbn_adm_taskIsFullyDone(task, member.id, occurrenceDate);
@@ -637,7 +637,9 @@ function jbn_buildAdminTaskRow(member, item, todayIso) {
   // 제목 + chip들
   const titleRow = jbn_el('div', { style: 'display:flex; align-items:center; gap:6px; flex-wrap:wrap' });
   titleRow.appendChild(jbn_el('span', { class: 'jbn-task-title' }, task.title));
-  if (isOverdue) {
+  if (kind === 'overdue') {
+    titleRow.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
+  } else if (kind === 'overdue_in') {
     titleRow.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
   } else if (isPostponed) {
     titleRow.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미뤄옴: ${occurrenceDate}`));
