@@ -306,27 +306,20 @@ function jbn_renderTaskRow(me, item, todayIso) {
 
   row.append(star, body);
 
-  // 스와이프
+  // 스와이프 규칙:
+  //   좌→우: 체크리스트 없음+미완료 → 완료 처리 / 나머지 모두 무반응
+  //   우→좌: 체크리스트 있음+미완료 OR 체크리스트 없음+미완료 → 미루기 팝업 / 완료 상태면 무반응
   jbn_attachSwipe(row, {
     onSwipeRight: () => {
-      // 완료 토글
-      if (cls.length) {
-        // 체크리스트 있는 경우: 모두 완료 / 모두 해제 토글
-        const allDone = cls.every(c => jbnState.completions.find(co =>
-          co.task_id === task.id && co.checklist_id === c.id &&
-          co.member_id === me.id && co.target_date === occurrenceDate));
-        if (allDone) {
-          for (const c of cls) jbn_unmarkComplete(task.id, c.id, occurrenceDate);
-        } else {
-          for (const c of cls) jbn_markComplete(task.id, c.id, occurrenceDate);
-          jbn_playCompleteSound();
-        }
-      } else {
-        if (fullyDone) jbn_unmarkComplete(task.id, null, occurrenceDate);
-        else { jbn_markComplete(task.id, null, occurrenceDate); jbn_playCompleteSound(); }
-      }
+      if (cls.length) return;   // 체크리스트 있으면 무반응 (개별 클릭으로만 완료)
+      if (fullyDone) return;    // 이미 완료면 무반응
+      jbn_markComplete(task.id, null, occurrenceDate);
+      jbn_playCompleteSound();
     },
-    onSwipeLeft: () => kind === 'postponed_future' ? null : jbn_openPostponeMenu(task, occurrenceDate, todayIso),
+    onSwipeLeft: () => {
+      if (fullyDone) return;    // 완료 상태면 무반응
+      jbn_openPostponeMenu(task, occurrenceDate, todayIso);
+    },
   });
 
   // 단일 클릭 (체크리스트 없을 때만) — body 클릭 또는 별표 클릭
