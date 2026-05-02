@@ -238,8 +238,8 @@ function jbn_renderToday(me) {
       }
       for (const dateIso of Object.keys(byDate).sort()) {
         const dp = jbn_parseIso(dateIso);
-        const dateLabel = `📅 ${dp.getFullYear()}년 ${dp.getMonth()+1}월 ${dp.getDate()}일 ${JBN_WEEKDAY_KO[dp.getDay()]}요일 (미룬 날짜)`;
-        listEl.appendChild(makeDivider(dateLabel, '#C07020'));
+        const dateLabel = `📅 ${dp.getFullYear()}년 ${dp.getMonth()+1}월 ${dp.getDate()}일 ${JBN_WEEKDAY_KO[dp.getDay()]}요일`;
+        listEl.appendChild(makeDivider(dateLabel, 'var(--jbn-warn)'));
         for (const item of byDate[dateIso]) listEl.appendChild(jbn_renderTaskRow(me, item, todayIso));
       }
     }
@@ -261,8 +261,8 @@ function jbn_renderTaskRow(me, item, todayIso) {
     class: 'jbn-task' +
       (fullyDone ? ' done' : '') +
       (kind === 'overdue' ? ' overdue' : '') +
-      (kind === 'postponed_in' ? ' postin' : '') +
-      (kind === 'postponed_future' ? ' postin' : ''),
+      (kind === 'postponed_in' ? ' overdue' : '') +
+      (kind === 'postponed_future' ? ' overdue' : ''),
     dataset: { dragId: task.id },
   });
 
@@ -281,11 +281,10 @@ function jbn_renderTaskRow(me, item, todayIso) {
     sub.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
   }
   if (kind === 'postponed_in') {
-    sub.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, '미룬 일'));
+    sub.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
   }
   if (kind === 'postponed_future') {
-    // displayDate = postponed_to (미래 날짜)
-    sub.appendChild(jbn_el('span', { class: 'jbn-chip soft' }, `미룬 날짜: ${displayDate}`));
+    sub.appendChild(jbn_el('span', { class: 'jbn-chip warn' }, `미이행 날짜: ${occurrenceDate}`));
   }
   body.append(titleLine, sub);
 
