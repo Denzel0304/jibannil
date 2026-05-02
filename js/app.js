@@ -44,6 +44,9 @@ function jbn_splashDismiss() {
 // 부트
 // ============================================================
 async function jbn_boot() {
+  // history 루트 상태 확보 (뒤로가기 기준점)
+  history.replaceState({ jbnRoot: true }, '');
+
   // 1) 캐시된 스냅샷 즉시 로드 (오프라인 첫 화면 띄우기용)
   jbn_loadSnapshot();
 

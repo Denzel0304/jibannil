@@ -20,6 +20,7 @@ import {
 } from './util.js';
 import {
   jbn_openModal, jbn_closeModal, jbn_closeAllModals, jbn_confirm, jbn_alert, jbn_prompt, jbn_pickDate,
+  jbn_hasOpenModal,
 } from './modal.js';
 import { jbn_attachDragSort } from './interactions.js';
 import { jbn_recurrenceLabel } from './recurrence.js';
@@ -28,11 +29,20 @@ import { jbn_isOccurrenceOn, jbn_pastOccurrences } from './recurrence.js';
 let jbn_adminTab = 'locations'; // 'locations' | 'alltasks' | 'members'
 let jbn_locationOpen = null;    // location_id
 
+// 뒤로가기: 모달 없고 location 열려있으면 location 닫기
+window.addEventListener('popstate', () => {
+  if (jbn_hasOpenModal()) return; // 모달은 modal.js에서 처리
+  if (jbn_locationOpen) {
+    jbn_locationOpen = null;
+    document.dispatchEvent(new CustomEvent('jbn:rerender'));
+  }
+});
+
 export function jbn_renderAdmin(me) {
   const wrap = jbn_el('section', { class: 'jbn-page' });
 
   // 서브탭
-  const sub = jbn_el('div', { class: 'jbn-subtab jbn-subtab-fixed' });
+  const sub = jbn_el('div', { class: 'jbn-subtab' });
   for (const [id, label] of [['locations','장소·할일'], ['alltasks','모든 일'], ['members','구성원']]) {
     sub.appendChild(jbn_el('button', {
       class: 'jbn-subtab-btn' + (jbn_adminTab === id ? ' on' : ''),
@@ -87,6 +97,7 @@ function jbn_renderLocationsAdmin() {
       class: 'jbn-row-title',
       onclick: () => {
         jbn_locationOpen = l.id;
+        history.pushState({ jbnLocation: true }, '');
         document.dispatchEvent(new CustomEvent('jbn:rerender'));
       },
     }, l.name + ` (${jbnState.tasks.filter(t => t.location_id === l.id).length})`));
@@ -102,7 +113,7 @@ function jbn_renderLocationsAdmin() {
       class: 'jbn-icon-btn',
       onclick: async (e) => {
         e.stopPropagation();
-        const ok = await jbn_confirm(`"${l.name}" 와 그 안의 모든 할 일을 삭제할까요?`);
+        const ok = await jbn_confirm(`"${l.name}" 과(와) 그 안의 모든 할 일을 삭제할까요?`);
         if (ok) jbn_deleteLocation(l.id);
       },
     }, '✕'));
@@ -158,7 +169,7 @@ function jbn_renderTasksOfLocation(loc) {
     row.appendChild(jbn_el('button', {
       class: 'jbn-icon-btn',
       onclick: async () => {
-        const ok = await jbn_confirm(`"${t.title}" 을(를) 삭제할까요?`);
+        const ok = await jbn_confirm(`"${t.title}" 를(을) 삭제할까요?`);
         if (ok) jbn_deleteTask(t.id);
       },
     }, '✕'));
@@ -429,7 +440,6 @@ function jbn_openTaskEditor(taskId, locationId) {
   const cancelBtn = jbn_el('button', { class: 'jbn-btn', onclick: () => jbn_closeAllModals() }, '취소');
 
   jbn_openModal({ title: isNew ? '새 할일' : '할 일 편집', body: root, footer: [cancelBtn, saveBtn] });
-  if (isNew) setTimeout(() => titleInput.focus(), 30);
 }
 
 // ============================================================

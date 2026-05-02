@@ -20,22 +20,39 @@ import {
 // 열린 모달 레이어 스택
 const jbn_modalStack = [];
 
+// 뒤로가기(popstate)로 닫히는 중인지 여부 (history.back() 중복 방지)
+let jbn_popstateClosing = false;
+
+window.addEventListener('popstate', () => {
+  if (jbn_modalStack.length > 0) {
+    jbn_popstateClosing = true;
+    jbn_closeModal();
+    jbn_popstateClosing = false;
+  }
+});
+
+export function jbn_hasOpenModal() { return jbn_modalStack.length > 0; }
+
 // 가장 위 모달 1개만 닫기 (prompt/confirm/pickDate 닫을 때)
 export function jbn_closeModal() {
   const top = jbn_modalStack.pop();
   if (top) top.remove();
+  if (!jbn_popstateClosing) history.back();
 }
 
 // 전체 닫기 (할일 저장/취소 등 부모 모달까지 모두 닫을 때)
 export function jbn_closeAllModals() {
+  const count = jbn_modalStack.length;
   while (jbn_modalStack.length) {
     const top = jbn_modalStack.pop();
     if (top) top.remove();
   }
+  if (!jbn_popstateClosing && count > 0) history.go(-count);
 }
 
 // 일반 컨텐츠 모달 — 호출마다 새 overlay 를 body 에 추가
 export function jbn_openModal({ title, body, footer }) {
+  history.pushState({ jbnModal: true }, '');
   const overlay = jbn_el('div', { class: 'jbn-modal-root on' });
   const back = jbn_el('div', {
     class: 'jbn-modal-back',
