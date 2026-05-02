@@ -20,11 +20,13 @@ import {
 // 열린 모달 레이어 스택
 const jbn_modalStack = [];
 
-// 뒤로가기(popstate)로 닫히는 중인지 여부 (history.back() 중복 방지)
+// 뒤로가기(popstate)로 닫히는 중 여부 (history.back() 중복 방지)
 let jbn_popstateClosing = false;
 
-window.addEventListener('popstate', () => {
+// 모달이 있을 때 popstate — stopImmediatePropagation으로 다른 리스너(admin 등) 차단
+window.addEventListener('popstate', (e) => {
   if (jbn_modalStack.length > 0) {
+    e.stopImmediatePropagation();
     jbn_popstateClosing = true;
     jbn_closeModal();
     jbn_popstateClosing = false;

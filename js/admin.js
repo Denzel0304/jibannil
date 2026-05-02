@@ -30,8 +30,8 @@ let jbn_adminTab = 'locations'; // 'locations' | 'alltasks' | 'members'
 let jbn_locationOpen = null;    // location_id
 
 // 뒤로가기: 모달 없고 location 열려있으면 location 닫기
+// (모달이 있으면 modal.js가 stopImmediatePropagation으로 처리하므로 여기까지 오지 않음)
 window.addEventListener('popstate', () => {
-  if (jbn_hasOpenModal()) return; // 모달은 modal.js에서 처리
   if (jbn_locationOpen) {
     jbn_locationOpen = null;
     document.dispatchEvent(new CustomEvent('jbn:rerender'));
@@ -42,7 +42,7 @@ export function jbn_renderAdmin(me) {
   const wrap = jbn_el('section', { class: 'jbn-page' });
 
   // 서브탭
-  const sub = jbn_el('div', { class: 'jbn-subtab' });
+  const sub = jbn_el('div', { class: 'jbn-subtab jbn-subtab-fixed' });
   for (const [id, label] of [['locations','장소·할일'], ['alltasks','모든 일'], ['members','구성원']]) {
     sub.appendChild(jbn_el('button', {
       class: 'jbn-subtab-btn' + (jbn_adminTab === id ? ' on' : ''),
@@ -440,6 +440,7 @@ function jbn_openTaskEditor(taskId, locationId) {
   const cancelBtn = jbn_el('button', { class: 'jbn-btn', onclick: () => jbn_closeAllModals() }, '취소');
 
   jbn_openModal({ title: isNew ? '새 할일' : '할 일 편집', body: root, footer: [cancelBtn, saveBtn] });
+  if (isNew) setTimeout(() => titleInput.focus(), 30);
 }
 
 // ============================================================
