@@ -22,12 +22,19 @@ const jbn_modalStack = [];
 
 export function jbn_hasOpenModal() { return jbn_modalStack.length > 0; }
 
-// 뒤로가기: 모달이 있으면 닫고 현재 상태 즉시 복원 (스택 고정)
+// 뒤로가기: 모달이 있으면 닫기.
+// jbn_openModal 이 history.pushState 를 호출하므로, 뒤로가기 시
+// history entry 가 소비되어 현재 위치로 자연스럽게 돌아옴.
+// admin.js 의 popstate 보다 나중에 등록되므로 jbn_hasOpenModal() 체크는
+// admin.js 에서 수행 — 여기서는 스택이 있으면 무조건 닫기.
 window.addEventListener('popstate', (e) => {
   if (jbn_modalStack.length > 0) {
     e.stopImmediatePropagation();
-    jbn_closeModal();
-    history.pushState(history.state, ''); // 현재 위치 복원
+    const top = jbn_modalStack.pop();
+    if (top) top.remove();
+    // ※ history.pushState(history.state, '') 제거:
+    //   openModal 에서 이미 pushState 했으므로 뒤로가기 시 entry 가
+    //   정확히 소비됨. 여기서 다시 push 하면 extra entry 가 쌓임.
   }
 });
 
@@ -47,6 +54,11 @@ export function jbn_closeAllModals() {
 
 // 일반 컨텐츠 모달 — 호출마다 새 overlay 를 body 에 추가
 export function jbn_openModal({ title, body, footer }) {
+  // 뒤로가기로 이 모달을 닫을 수 있도록 history entry 추가.
+  // 프로그래매틱 닫기(closeModal/closeAllModals) 시에는 entry 가 orphan 으로
+  // 남지만, admin.js popstate 핸들러가 orphan 을 자동으로 건너뜀.
+  history.pushState({ jbnModal: true }, '');
+
   const overlay = jbn_el('div', { class: 'jbn-modal-root on' });
   const back = jbn_el('div', {
     class: 'jbn-modal-back',

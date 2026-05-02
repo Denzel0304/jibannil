@@ -29,10 +29,24 @@ import { jbn_isOccurrenceOn, jbn_pastOccurrences } from './recurrence.js';
 let jbn_adminTab = 'locations'; // 'locations' | 'alltasks' | 'members'
 let jbn_locationOpen = null;    // location_id
 
-// 뒤로가기: 모달 없고 location 열려있으면 location 닫기
-// (모달이 있으면 modal.js가 stopImmediatePropagation으로 처리하므로 여기까지 오지 않음)
-window.addEventListener('popstate', () => {
-  if (jbn_locationOpen) {
+// 뒤로가기 처리 (admin.js 는 modal.js 보다 먼저 등록됨)
+//
+// 1) 모달이 열려 있으면 → modal.js 에 맡기고 여기선 무시.
+//    (modal.js 의 popstate 가 뒤에 실행되어 모달을 닫음)
+//
+// 2) 방금 이동한 state 가 {jbnModal:true} 면 → 이미 닫힌 모달의
+//    orphan history entry. 자동으로 한 칸 더 back 해서 건너뜀.
+//    (프로그래매틱 closeModal/closeAllModals 는 history cleanup 없이
+//     DOM 만 제거하므로 orphan entry 가 남을 수 있음)
+//
+// 3) 그 외, location 이 열려 있으면 → location 닫기 (장소 목록으로).
+window.addEventListener('popstate', (e) => {
+  if (jbn_hasOpenModal()) return;          // (1) 모달이 살아 있음 → modal.js 처리
+  if (e.state?.jbnModal) {                 // (2) orphan modal entry → 건너뜀
+    history.back();
+    return;
+  }
+  if (jbn_locationOpen) {                  // (3) 장소 목록으로 복귀
     jbn_locationOpen = null;
     document.dispatchEvent(new CustomEvent('jbn:rerender'));
   }
