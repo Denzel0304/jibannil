@@ -12,7 +12,7 @@ export const JBN_CONFIG = {
   supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF0bWR3Y25kYWZuY3FpeHpwc3hhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MDcwMTQsImV4cCI6MjA5Mjk4MzAxNH0.HGKKm4lJ40HkXZ160IajtLdGQyhKAmcoD8JsD9Mngro',
 
   // 하루의 시작 시각(시). 새벽 4시 = 이전 날의 연장.
-  dayStartHour: 4,
+  dayStartHour: 0,
 
   // 완료 효과음 파일명. 루트(index.html 옆)에 둘 것.
   completionSoundFile: 'effect 1.mp3',
