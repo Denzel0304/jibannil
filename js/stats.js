@@ -138,8 +138,7 @@ export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 60) {
 // 한 사람의 오늘 진행률 (overdue 제외, 오늘 슬롯만 분모)
 // ============================================================
 export function jbn_personDailyProgress(memberId, todayIso) {
-  const items = jbn_buildTodayList(memberId, todayIso, 0).filter(x => x.kind !== 'overdue');
-  // 위에서 lookback=0 이라 overdue 안 들어옴.
+  const items = jbn_buildTodayList(memberId, todayIso, 60);
   let total = 0, done = 0;
   for (const it of items) {
     const { total: t, done: d } = jbn_taskProgressCounts(it.task, memberId, it.occurrenceDate);
@@ -174,6 +173,25 @@ export function jbn_overdueByMember(todayIso, lookbackDays = 60) {
         );
         if (!allDone) {
           items.push({ task, occurrenceDate: iso });
+        }
+      }
+      // 오늘 발생 + 미래로 미뤄진 항목도 미완료 누적에 포함
+      if (jbn_isOccurrenceOn(task, todayIso)) {
+        const postponedToFuture = jbnState.postponements.some(p =>
+          p.task_id === task.id && p.member_id === m.id &&
+          p.original_date === todayIso && p.postponed_to > todayIso
+        );
+        if (postponedToFuture) {
+          const slots = jbn_taskSlots(task.id);
+          const allDone = slots.every(s =>
+            jbnState.completions.some(c =>
+              c.task_id === task.id &&
+              (c.checklist_id || null) === (s.checklistId || null) &&
+              c.member_id === m.id &&
+              c.target_date === todayIso
+            )
+          );
+          if (!allDone) items.push({ task, occurrenceDate: todayIso });
         }
       }
     }
