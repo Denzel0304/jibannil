@@ -37,7 +37,7 @@ function jbn_getPostponeCountThisMonth(memberId) {
 }
 
 export function jbn_schedulePaint_exported() { jbn_schedulePaint(); }
-export function jbn_setRoute(name) { jbn_lastRoute = name; jbn_schedulePaint(); }
+export function jbn_setRoute(name) { jbn_lastRoute = name; window.scrollTo(0, 0); jbn_schedulePaint(); }
 export function jbn_currentRoute() { return jbn_lastRoute; }
 
 let jbn_celebratedDate = null;
