@@ -24,6 +24,18 @@ import { jbn_pickDate, jbn_openModal, jbn_closeModal, jbn_alert, jbn_confirm } f
 
 let jbn_lastRoute = 'today';
 
+// 이번 달 미루기 사용 횟수 (member_id + created_at 기준)
+function jbn_getPostponeCountThisMonth(memberId) {
+  const now = new Date();
+  const thisYear = now.getFullYear();
+  const thisMonth = now.getMonth();
+  return jbnState.postponements.filter(p => {
+    if (p.member_id !== memberId) return false;
+    const d = new Date(p.created_at);
+    return d.getFullYear() === thisYear && d.getMonth() === thisMonth;
+  }).length;
+}
+
 export function jbn_schedulePaint_exported() { jbn_schedulePaint(); }
 export function jbn_setRoute(name) { jbn_lastRoute = name; jbn_schedulePaint(); }
 export function jbn_currentRoute() { return jbn_lastRoute; }
@@ -176,6 +188,19 @@ function jbn_renderToday(me) {
     total ? `${done} / ${total} (${Math.round(ratio*100)}%)` : ''));
   wrap.appendChild(bar);
 
+  // 미루기 소진 안내 (super 아닌 경우, 5회 모두 사용 시)
+  if (!me.is_super && jbn_getPostponeCountThisMonth(me.id) >= 5) {
+    const notice = jbn_el('div', {
+      style: [
+        'background:#FDECEC; border:1px solid #F4C0C0;',
+        'border-radius:10px; padding:10px 14px;',
+        'font-size:13px; font-weight:600; color:var(--jbn-warn);',
+        'text-align:center;',
+      ].join(''),
+    }, '이번 달은 미루기 5회를 모두 사용하였습니다.');
+    wrap.appendChild(notice);
+  }
+
   // 100% 축하
   if (total > 0 && done === total && jbn_celebratedDate !== todayIso) {
     jbn_celebratedDate = todayIso;
@@ -238,8 +263,8 @@ function jbn_renderToday(me) {
       }
       for (const dateIso of Object.keys(byDate).sort()) {
         const dp = jbn_parseIso(dateIso);
-        const dateLabel = `📅 ${dp.getFullYear()}년 ${dp.getMonth()+1}월 ${dp.getDate()}일 ${JBN_WEEKDAY_KO[dp.getDay()]}요일`;
-        listEl.appendChild(makeDivider(dateLabel, 'var(--jbn-warn)'));
+        const dateLabel = `📅 ${dp.getFullYear()}년 ${dp.getMonth()+1}월 ${dp.getDate()}일 ${JBN_WEEKDAY_KO[dp.getDay()]}요일 (미룬 날짜)`;
+        listEl.appendChild(makeDivider(dateLabel, '#C07020'));
         for (const item of byDate[dateIso]) listEl.appendChild(jbn_renderTaskRow(me, item, todayIso));
       }
     }
@@ -261,8 +286,8 @@ function jbn_renderTaskRow(me, item, todayIso) {
     class: 'jbn-task' +
       (fullyDone ? ' done' : '') +
       (kind === 'overdue' ? ' overdue' : '') +
-      (kind === 'postponed_in' ? ' overdue' : '') +
-      (kind === 'postponed_future' ? ' overdue' : ''),
+      (kind === 'postponed_in' ? ' postin' : '') +
+      (kind === 'postponed_future' ? ' postin' : ''),
     dataset: { dragId: task.id },
   });
 
@@ -320,15 +345,19 @@ function jbn_renderTaskRow(me, item, todayIso) {
     if (co) body.appendChild(jbn_el('div', { class: 'jbn-time' }, '완료 ' + jbn_fmtDateTime(co.completed_at)));
   }
 
+  // super 아닌 경우 이번 달 미루기 5회 소진 여부
+  const postponeBlocked = !me.is_super && jbn_getPostponeCountThisMonth(me.id) >= 5;
+
   // 점3개 버튼 — PC에서 미루기 팝업 트리거 (스와이프 우→좌 대체)
-  // 완료 상태면 비활성(흐리게), 미완료일 때만 클릭 가능
+  // 완료 상태 또는 미루기 소진 시 비활성
   const moreBtn = jbn_el('button', {
     class: 'jbn-icon-btn',
     title: '미루기',
-    style: fullyDone ? 'opacity:.25; cursor:default; flex:none' : 'flex:none',
+    style: (fullyDone || postponeBlocked) ? 'opacity:.25; cursor:default; flex:none' : 'flex:none',
     onclick: (e) => {
       e.stopPropagation();
       if (fullyDone) return;
+      if (postponeBlocked) { jbn_toast('이번 달 미루기 횟수를 모두 사용했어요'); return; }
       jbn_openPostponeMenu(task, occurrenceDate, todayIso);
     },
   }, '⋮');
@@ -345,7 +374,8 @@ function jbn_renderTaskRow(me, item, todayIso) {
       jbn_playCompleteSound();
     },
     onSwipeLeft: () => {
-      if (fullyDone) return;    // 완료 상태면 무반응
+      if (fullyDone) return;
+      if (postponeBlocked) { jbn_toast('이번 달 미루기 횟수를 모두 사용했어요'); return; }
       jbn_openPostponeMenu(task, occurrenceDate, todayIso);
     },
   });
