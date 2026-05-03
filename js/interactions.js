@@ -136,9 +136,20 @@ export function jbn_attachSwipe(el, { onSwipeLeft, onSwipeRight }) {
 export const jbn_dragLockState = { locked: false, reorderCooldown: false, _cooldownTimer: null };
 
 export function jbn_attachDragSort(container, onCommit) {
+  // 드래그 가능한 항목이 2개 미만이면 아무것도 하지 않음
+  if (container.querySelectorAll('[data-drag-id]').length <= 1) return;
+
   let dragging     = null;
   let placeholder  = null;
   let dragOffsetY  = 0;  // 핸들 클릭 지점과 row 상단의 거리
+
+  // 드래그 중 페이지 스크롤 잠금 / 해제
+  function jbn_lockScroll() {
+    document.documentElement.style.overflow = 'hidden';
+  }
+  function jbn_unlockScroll() {
+    document.documentElement.style.overflow = '';
+  }
 
   function onHandleStart(e, row) {
     e.preventDefault();
@@ -150,6 +161,7 @@ export function jbn_attachDragSort(container, onCommit) {
     dragging = row;
     dragOffsetY = clientY - rowRect.top;
     jbn_dragLockState.locked = true;
+    jbn_lockScroll();
 
     // placeholder: 원래 자리에 빈 공간 유지
     placeholder = document.createElement('div');
@@ -222,6 +234,7 @@ export function jbn_attachDragSort(container, onCommit) {
 
     // 락 해제는 약간 지연 (마지막 paint 완료 후)
     setTimeout(() => { jbn_dragLockState.locked = false; }, 60);
+    jbn_unlockScroll();
     onCommit(orderedIds);
   }
 
