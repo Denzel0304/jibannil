@@ -40,8 +40,6 @@ input, textarea { font-family: inherit; }
 #jbnApp {
   max-width: 560px;
   margin: 0 auto;
-  min-height: 100vh;
-  padding-bottom: 40px;
 }
 
 /* ===== 로그인 ===== */
