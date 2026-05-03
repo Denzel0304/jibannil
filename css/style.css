@@ -59,7 +59,7 @@ input, textarea { font-family: inherit; }
 
 /* ===== 탭바 ===== */
 .jbn-tabbar {
-  position: sticky; top: 0; z-index: 10001;
+  position: sticky; top: 0; z-index: 5;
   display: flex; gap: 4px;
   background: var(--jbn-bg);
   padding: 10px 12px 8px;
@@ -255,8 +255,12 @@ input, textarea { font-family: inherit; }
 }
 /* 관리탭 내 서브탭 고정 */
 .jbn-subtab-fixed {
-  position: sticky;
+  position: fixed;
   top: 57px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 560px;
   z-index: 10000;
   border-radius: 0;
   padding: 8px 12px;
