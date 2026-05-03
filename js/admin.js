@@ -48,6 +48,7 @@ window.addEventListener('popstate', (e) => {
   }
   if (jbn_locationOpen) {                  // (3) 장소 목록으로 복귀
     jbn_locationOpen = null;
+    window.scrollTo(0, 0);
     document.dispatchEvent(new CustomEvent('jbn:rerender'));
   }
 });
@@ -62,13 +63,12 @@ export function jbn_renderAdmin(me) {
       class: 'jbn-subtab-btn' + (jbn_adminTab === id ? ' on' : ''),
       onclick: () => {
         jbn_adminTab = id;
-        // 외부에서 paint 트리거
+        window.scrollTo(0, 0);
         document.dispatchEvent(new CustomEvent('jbn:rerender'));
       },
     }, label));
   }
   wrap.appendChild(sub);
-  // position:fixed 서브탭이 콘텐츠를 가리지 않도록 동일 높이 스페이서
   wrap.appendChild(jbn_el('div', { style: 'height:54px;flex-shrink:0' }));
 
   if (jbn_adminTab === 'locations') wrap.appendChild(jbn_renderLocationsAdmin());
@@ -113,6 +113,7 @@ function jbn_renderLocationsAdmin() {
       class: 'jbn-row-title',
       onclick: () => {
         jbn_locationOpen = l.id;
+        window.scrollTo(0, 0);
         history.pushState({ jbnLocation: true }, '');
         document.dispatchEvent(new CustomEvent('jbn:rerender'));
       },
@@ -151,7 +152,7 @@ function jbn_renderTasksOfLocation(loc) {
   wrap.appendChild(jbn_el('div', { class: 'jbn-section-head' },
     jbn_el('button', {
       class: 'jbn-btn',
-      onclick: () => { jbn_locationOpen = null; document.dispatchEvent(new CustomEvent('jbn:rerender')); },
+      onclick: () => { jbn_locationOpen = null; window.scrollTo(0, 0); document.dispatchEvent(new CustomEvent('jbn:rerender')); },
     }, '‹ 장소'),
     jbn_el('h2', { class: 'jbn-h2', style: 'flex:1;text-align:center' }, loc.name),
     jbn_el('button', {
