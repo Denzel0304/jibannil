@@ -106,6 +106,7 @@ export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 60) {
     const pasts = jbn_pastOccurrences(task, todayIso, lookbackDays);
     for (const iso of pasts) {
       if (jbn_postponedAwayBy(task.id, memberId, iso)) continue;
+      if (jbn_taskIsFullyDone(task, memberId, iso)) continue;
       // 이미 다른 항목으로 들어가있는지(같은 task + 같은 occurrenceDate) 체크
       if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
       list.push({ task, occurrenceDate: iso, displayDate: iso, kind: 'overdue' });

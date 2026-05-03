@@ -66,8 +66,20 @@ export function jbn_loadSnapshot() {
     const obj = JSON.parse(s);
     Object.assign(jbnState, obj);
     jbnState.hydrated = true;
+    jbn_pruneOldData();
     return true;
   } catch { return false; }
+}
+
+// ---------- 30일 초과 로컬 데이터 정리 ----------
+// completions(target_date), postponements(original_date) 기준 30일 이상 지난 레코드를
+// 로컬 스냅샷에서 제거. 서버 DB는 건드리지 않음.
+function jbn_pruneOldData() {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 30);
+  const cutoffIso = cutoff.toISOString().slice(0, 10);
+  jbnState.completions   = jbnState.completions.filter(c => (c.target_date   || '') >= cutoffIso);
+  jbnState.postponements = jbnState.postponements.filter(p => (p.original_date || '') >= cutoffIso);
 }
 
 // ---------- 서버에서 전체 fetch ----------
@@ -90,6 +102,7 @@ export async function jbn_fetchAll() {
   }
   jbnState.fetchedAt = Date.now();
   jbnState.hydrated = true;
+  jbn_pruneOldData();
   jbn_saveSnapshot();
   jbn_emitChange('fetchAll');
 }

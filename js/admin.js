@@ -502,6 +502,7 @@ function jbn_adm_buildTodayList(memberId, todayIso) {
     const pasts = jbn_pastOccurrences(task, todayIso, 60);
     for (const iso of pasts) {
       if (jbn_adm_postponedAwayBy(task.id, memberId, iso)) continue;
+      if (jbn_adm_taskIsFullyDone(task, memberId, iso)) continue;
       if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
       list.push({ task, occurrenceDate: iso, kind: 'overdue' });
     }
