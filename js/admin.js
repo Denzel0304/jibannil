@@ -502,7 +502,14 @@ function jbn_adm_buildTodayList(memberId, todayIso) {
     const pasts = jbn_pastOccurrences(task, todayIso, 60);
     for (const iso of pasts) {
       if (jbn_adm_postponedAwayBy(task.id, memberId, iso)) continue;
-      if (jbn_adm_taskIsFullyDone(task, memberId, iso)) continue;
+      if (jbn_adm_taskIsFullyDone(task, memberId, iso)) {
+        // 완료됐어도 오늘 완료한 것이면 자정까지 유지. 자정이 지난 완료만 제거.
+        const recs = jbnState.completions.filter(c =>
+          c.task_id === task.id && c.member_id === memberId && c.target_date === iso);
+        const doneBeforeToday = recs.length > 0 && recs.every(c =>
+          c.completed_at && jbn_isoDate(new Date(c.completed_at)) < todayIso);
+        if (doneBeforeToday) continue;
+      }
       if (list.some(x => x.task.id === task.id && x.occurrenceDate === iso)) continue;
       list.push({ task, occurrenceDate: iso, kind: 'overdue' });
     }
