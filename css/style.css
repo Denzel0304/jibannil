@@ -59,7 +59,7 @@ input, textarea { font-family: inherit; }
 
 /* ===== 탭바 ===== */
 .jbn-tabbar {
-  position: sticky; top: 0; z-index: 5;
+  position: sticky; top: 0; z-index: 10001;
   display: flex; gap: 4px;
   background: var(--jbn-bg);
   padding: 10px 12px 8px;
@@ -257,13 +257,7 @@ input, textarea { font-family: inherit; }
 .jbn-subtab-fixed {
   position: sticky;
   top: 57px;
-  z-index: 4;
-  border-radius: 0;
-  padding: 8px 12px;
-  background: var(--jbn-bg);
-  border-bottom: 1px solid var(--jbn-line);
-  margin-bottom: 0;
-}
+  z-index: 10000;
 .jbn-admin-wrap { display: flex; flex-direction: column; height: 100%; }
 .jbn-admin-body { flex: 1; overflow-y: auto; }
 .jbn-subtab-btn {
