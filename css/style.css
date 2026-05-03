@@ -258,6 +258,12 @@ input, textarea { font-family: inherit; }
   position: sticky;
   top: 57px;
   z-index: 10000;
+  border-radius: 0;
+  padding: 8px 12px;
+  background: var(--jbn-bg);
+  border-bottom: 1px solid var(--jbn-line);
+  margin-bottom: 0;
+}
 .jbn-admin-wrap { display: flex; flex-direction: column; height: 100%; }
 .jbn-admin-body { flex: 1; overflow-y: auto; }
 .jbn-subtab-btn {
