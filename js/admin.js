@@ -20,7 +20,7 @@ import {
 } from './util.js';
 import {
   jbn_openModal, jbn_closeModal, jbn_closeAllModals, jbn_confirm, jbn_alert, jbn_prompt, jbn_pickDate,
-  jbn_hasOpenModal,
+  jbn_hasOpenModal, jbn_isProgrammaticClose,
 } from './modal.js';
 import { jbn_attachDragSort } from './interactions.js';
 import { jbn_recurrenceLabel } from './recurrence.js';
@@ -41,6 +41,7 @@ let jbn_locationOpen = null;    // location_id
 //
 // 3) 그 외, location 이 열려 있으면 → location 닫기 (장소 목록으로).
 window.addEventListener('popstate', (e) => {
+  if (jbn_isProgrammaticClose) return;     // (0) modal.js 의 history.go() 가 유발한 이벤트 → 무시
   if (jbn_hasOpenModal()) return;          // (1) 모달이 살아 있음 → modal.js 처리
   if (e.state?.jbnModal) {                 // (2) orphan modal entry → 건너뜀
     history.back();

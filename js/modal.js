@@ -3,16 +3,21 @@
 // 자체 모달 + 달력. iPhone <input type="date"> 정책 우회 위해 직접 구현.
 // 단일 선택 / 복수 선택 / 확인 / 알림 / 일반 컨텐츠 모드 지원.
 //
-// [스택 무한 누적 수정]
-// 기존: jbn_openModal() 마다 history.pushState() → 프로그래매틱 닫기
-//       (closeModal/closeAllModals) 시 DOM만 제거, history entry 는 남아 orphan 누적.
+// [핵심 수정] 단일 루트 → 모달 스택 구조로 변경.
+//   기존: jbn_openModal() 호출 시 jbn_clear(root) 로 기존 내용 전부 삭제
+//         → 부모 모달(할일 편집기)이 하위 모달(prompt/pickDate) 열릴 때 사라지는 버그
+//   변경: 모달마다 새 overlay 를 body 에 append (스택 push)
+//         닫을 때 가장 위 overlay 만 제거 (스택 pop)
+//         → 부모 모달은 그대로 유지됨
 //
-// 변경: 모달 1개당 pushState 1회 (동일). 단, 프로그래매틱으로 닫을 때는
-//       닫는 모달 수만큼 history.go(-n) 으로 entry 를 함께 제거.
-//       → 뒤로가기로 닫을 때: popstate 이벤트 → DOM 제거 (history entry는 자동 소비)
-//       → 프로그래매틱으로 닫을 때: DOM 제거 + history.go(-n)
+//   추가: jbn_closeAllModals() — 저장/취소 시 전체 닫기용
 //
-// 결과: history entry 가 항상 모달 스택과 1:1 대응 → 무한 누적 없음.
+// [history 스택 누적 수정]
+//   jbn_openModal() 마다 history.pushState() 로 entry 를 쌓고,
+//   프로그래매틱 닫기(closeModal/closeAllModals) 시 DOM 제거 + history.go(-n) 으로
+//   entry 도 함께 정리.
+//   admin.js 의 popstate 가 동시에 실행되는 부작용을 막기 위해
+//   jbn_isProgrammaticClose 플래그를 export → admin.js 에서 체크.
 // ============================================================
 
 import {
@@ -22,15 +27,16 @@ import {
 // 열린 모달 레이어 스택
 const jbn_modalStack = [];
 
-// 프로그래매틱 닫기로 인해 history.go() 중인지 여부 (popstate 중복 방지)
-let jbn_closingProgrammatically = false;
+// 프로그래매틱 닫기 중임을 외부(admin.js)에 알리는 플래그
+// admin.js 의 popstate 핸들러가 이 플래그를 확인해 불필요한 장소 닫기를 방지.
+export let jbn_isProgrammaticClose = false;
 
 export function jbn_hasOpenModal() { return jbn_modalStack.length > 0; }
 
 // 뒤로가기: 모달이 있으면 닫기.
 window.addEventListener('popstate', (e) => {
-  // 프로그래매틱 닫기가 유발한 popstate 는 무시 (이미 DOM은 제거됨)
-  if (jbn_closingProgrammatically) return;
+  // 프로그래매틱 닫기가 유발한 popstate 는 무시 (DOM은 이미 제거됨)
+  if (jbn_isProgrammaticClose) return;
 
   if (jbn_modalStack.length > 0) {
     e.stopImmediatePropagation();
@@ -40,7 +46,6 @@ window.addEventListener('popstate', (e) => {
 });
 
 // 가장 위 모달 1개만 닫기 (프로그래매틱)
-// DOM 제거 + history entry 1칸 되돌리기
 export function jbn_closeModal() {
   const top = jbn_modalStack.pop();
   if (top) {
@@ -50,7 +55,6 @@ export function jbn_closeModal() {
 }
 
 // 전체 닫기 (할일 저장/취소 등 부모 모달까지 모두 닫을 때)
-// DOM 전부 제거 + history entry n칸 되돌리기
 export function jbn_closeAllModals() {
   const count = jbn_modalStack.length;
   while (jbn_modalStack.length) {
@@ -60,13 +64,14 @@ export function jbn_closeAllModals() {
   if (count > 0) _historyBack(count);
 }
 
-// history.go(-n) 래퍼: popstate 가 중복 실행되지 않도록 플래그 세팅
+// history.go(-n) 래퍼.
+// 플래그를 true 로 세팅해 modal.js / admin.js 양쪽 popstate 가 무시하게 함.
 function _historyBack(n) {
   if (n <= 0) return;
-  jbn_closingProgrammatically = true;
+  jbn_isProgrammaticClose = true;
   history.go(-n);
   // history.go() 는 비동기이므로 짧은 시간 후 플래그 해제
-  setTimeout(() => { jbn_closingProgrammatically = false; }, 200);
+  setTimeout(() => { jbn_isProgrammaticClose = false; }, 200);
 }
 
 // 일반 컨텐츠 모달 — 호출마다 새 overlay 를 body 에 추가
