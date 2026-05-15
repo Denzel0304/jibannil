@@ -498,7 +498,7 @@ function jbn_adm_buildTodayList(memberId, todayIso) {
     const into = jbnState.postponements.filter(p =>
       p.task_id === task.id && p.member_id === memberId && p.postponed_to === todayIso);
     for (const p of into) {
-      list.push({ task, occurrenceDate: p.original_date, kind: 'postponed_in' });
+      list.push({ task, occurrenceDate: p.original_date, displayDate: todayIso, kind: 'postponed_in' });
     }
     const pasts = jbn_pastOccurrences(task, todayIso, 60);
     for (const iso of pasts) {
