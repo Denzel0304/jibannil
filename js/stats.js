@@ -84,7 +84,7 @@ export function jbn_taskIsFullyDone(task, memberId, targetDate) {
 //       postponed_in: 다른 날에서 오늘로 미뤘다
 //       overdue: 과거 발생인데 미완료/미연기 (빨간 강조)
 // ============================================================
-export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 60) {
+export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 30) { // 30 = 완료기록 보관기간과 일치 (늘리면 phantom overdue 재발)
   const list = [];
   const myTasks = jbnState.tasks.filter(t => jbn_isAssignee(t.id, memberId));
 
@@ -146,7 +146,7 @@ export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 60) {
 // 한 사람의 오늘 진행률 (overdue 제외, 오늘 슬롯만 분모)
 // ============================================================
 export function jbn_personDailyProgress(memberId, todayIso) {
-  const items = jbn_buildTodayList(memberId, todayIso, 60);
+  const items = jbn_buildTodayList(memberId, todayIso, 30); // 30 = 완료기록 보관기간과 일치
   let total = 0, done = 0;
   for (const it of items) {
     const { total: t, done: d } = jbn_taskProgressCounts(it.task, memberId, it.occurrenceDate);
@@ -157,7 +157,7 @@ export function jbn_personDailyProgress(memberId, todayIso) {
 }
 
 // 어제까지 누적 미완료 (빨간 표시 통계)
-export function jbn_overdueByMember(todayIso, lookbackDays = 60) {
+export function jbn_overdueByMember(todayIso, lookbackDays = 30) { // 30 = 완료기록 보관기간과 일치 (늘리면 phantom overdue 재발)
   // 미완료 누적 = 과거 발생일 중 완료 기록이 없는 슬롯.
   // 미뤘는지(postpone) 여부와 무관하게, 실제로 완료되지 않은 것만 카운트.
   const map = {};

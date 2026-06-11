@@ -51,7 +51,7 @@ export function jbn_recurrenceLabel(task) {
 
 // 과거 어느 날부터 어제까지의 발생일 중, 미완료/미연기 건을 찾기 위해
 // 발생일을 역순으로 반환. (lookbackDays 일 전까지)
-export function jbn_pastOccurrences(task, todayIso, lookbackDays = 60) {
+export function jbn_pastOccurrences(task, todayIso, lookbackDays = 30) { // 30 = 완료기록 보관기간과 일치 (늘리면 phantom overdue 재발)
   const out = [];
   const start = task.start_date;
   for (let i = 1; i <= lookbackDays; i++) {

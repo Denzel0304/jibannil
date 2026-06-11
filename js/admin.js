@@ -500,7 +500,7 @@ function jbn_adm_buildTodayList(memberId, todayIso) {
     for (const p of into) {
       list.push({ task, occurrenceDate: p.original_date, displayDate: todayIso, kind: 'postponed_in' });
     }
-    const pasts = jbn_pastOccurrences(task, todayIso, 60);
+    const pasts = jbn_pastOccurrences(task, todayIso, 30); // 30 = 완료기록 보관기간과 일치 (늘리면 phantom overdue 재발)
     for (const iso of pasts) {
       if (jbn_adm_postponedAwayBy(task.id, memberId, iso)) continue;
       if (jbn_adm_taskIsFullyDone(task, memberId, iso)) {
