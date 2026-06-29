@@ -134,6 +134,14 @@ export function jbn_buildTodayList(memberId, todayIso, lookbackDays = 30) { // 3
     for (const p of futurePostponed) {
       // 이미 목록에 없으면 추가
       if (list.some(x => x.task.id === task.id && x.occurrenceDate === p.original_date && x.kind === 'postponed_future')) continue;
+      // 완료됐으면 완료한 날 +1 자정에 사라져야 함 (오늘 완료한 것은 오늘 자정까지 유지)
+      if (jbn_taskIsFullyDone(task, memberId, p.original_date)) {
+        const recs = jbnState.completions.filter(c =>
+          c.task_id === task.id && c.member_id === memberId && c.target_date === p.original_date);
+        const doneBeforeToday = recs.length > 0 && recs.every(c =>
+          c.completed_at && jbn_isoDate(new Date(c.completed_at)) < todayIso);
+        if (doneBeforeToday) continue;
+      }
       list.push({ task, occurrenceDate: p.original_date, displayDate: p.postponed_to, kind: 'postponed_future' });
     }
   }
